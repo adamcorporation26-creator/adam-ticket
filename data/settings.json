@@ -1,0 +1,17 @@
+{
+  "guildName": "ADAM CORPORATION",
+  "memberCount": 579,
+  "channelsCount": 118,
+  "rolesCount": 39,
+  "botsCount": 13,
+  "emojisCount": 16,
+  "stickersCount": 4,
+  "supportRoles": [
+    "Founder",
+    "Staff",
+    "Manager"
+  ],
+  "blockedRoles": [],
+  "defaultCategory": "Purchase",
+  "logChannel": "#ticket-logs"
+}

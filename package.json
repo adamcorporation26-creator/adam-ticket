@@ -1,0 +1,29 @@
+{
+  "name": "ticket-king-bot",
+  "version": "1.0.0",
+  "description": "Discord Ticket Bot & Web Dashboard inspired by Ticket King",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "build:client": "npm run build --prefix client",
+    "install:all": "npm install && npm install --prefix client"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "ticket",
+    "ticket-king",
+    "dashboard"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}

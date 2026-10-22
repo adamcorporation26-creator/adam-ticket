@@ -1,0 +1,112 @@
+{
+  "default-purchase-panel": {
+    "id": "default-purchase-panel",
+    "name": "Purchase Ticket Panel",
+    "channelType": "text",
+    "category": "╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬",
+    "supportRoles": [
+      "𝐒𝐭𝐚𝐟𝐟",
+      "𝐌𝐚𝐧𝐚𝐠𝐞𝐫",
+      "𝐅𝐨𝐮𝐧𝐝𝐞𝐫"
+    ],
+    "blockedRoles": [],
+    "customTicketName": "buy-{USER_NAME}",
+    "openLogChannel": "#ticket-logs",
+    "closeLogChannel": "#ticket-logs",
+    "embed": {
+      "authorName": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐢𝐜𝐤𝐞𝐭𝐬",
+      "authorUrl": "",
+      "authorIconUrl": "",
+      "title": "",
+      "titleUrl": "",
+      "description": "<:140268information:1559615872409272419> Rules\n• Tickets Are For **Purchases** Only.\n• Any Other Requests = **Instant Ban**.\n• Stay **Respectful** Or Risk **Removal**.\n",
+      "color": "#ff0037",
+      "thumbnailUrl": "",
+      "imageUrl": "https://cdn.discordapp.com/attachments/1469382427985186829/1560177770300973136/image.png?ex=6ad315c7&is=6ad1c447&hm=78794fd19edd186909168fd3f0dd3e95cf6f449cd8e04faacc085aaaa1b08c01&",
+      "footerIconUrl": "",
+      "footerText": ""
+    },
+    "welcomeMessage": {
+      "content": "Welcome {USER}. You can continue your purchase in 🛒 {GUILD_NAME} here.\n\nWait for a moment our Staffs will help you!",
+      "embedTitle": "Ticket Created!",
+      "embedDescription": "Please describe your request in detail. Staff will respond shortly.",
+      "color": "#e11d48"
+    },
+    "buttons": [
+      {
+        "id": "buy_btn",
+        "label": "Buy",
+        "style": "Danger",
+        "emoji": "<:ClientsEmoji:1553290801528836136>",
+        "customId": "ticket_create_buy"
+      }
+    ],
+    "deployedMessageId": "1560747968360095755",
+    "deployedChannelId": "1521227405468106779",
+    "extraMessageContent": "",
+    "permissions": {
+      "addReactions": true,
+      "attachFiles": true,
+      "embedLinks": false,
+      "sendVoiceMessages": true,
+      "useExternalEmojis": true,
+      "useExternalStickers": true,
+      "useAppCommands": false
+    }
+  },
+  "default-support-panel": {
+    "id": "default-support-panel",
+    "name": "Support Ticket Panel",
+    "channelType": "text",
+    "category": "╰--- 𝐒𝐮𝐩𝐩𝐨𝐫𝐭",
+    "supportRoles": [
+      "𝐒𝐭𝐚𝐟𝐟",
+      "𝐌𝐚𝐧𝐚𝐠𝐞𝐫",
+      "𝐅𝐨𝐮𝐧𝐝𝐞𝐫"
+    ],
+    "blockedRoles": [],
+    "customTicketName": "support-{USER_NAME}",
+    "openLogChannel": "#𝐒𝐮𝐩𝐩𝐨𝐫𝐭-𝐓𝐢𝐜𝐤𝐞𝐭-𝐋𝐨𝐠𝐬",
+    "closeLogChannel": "#𝐒𝐮𝐩𝐩𝐨𝐫𝐭-𝐓𝐢𝐜𝐤𝐞𝐭-𝐋𝐨𝐠𝐬",
+    "embed": {
+      "authorName": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐒𝐮𝐩𝐩𝐨𝐫𝐭",
+      "authorUrl": "",
+      "authorIconUrl": "",
+      "title": "",
+      "titleUrl": "",
+      "description": "<:140268information:1559615872409272419> Rules\n• Tickets Are For **Support** Only.\n• Any Other Requests = **Instant Ban**.\n• Stay **Respectful** Or Risk **Removal**.\n",
+      "color": "#ff0037",
+      "thumbnailUrl": "",
+      "imageUrl": "https://cdn.discordapp.com/attachments/1469382427985186829/1560177770300973136/image.png?ex=6ad1c447&is=6ad072c7&hm=b212334933f60352742741b2c11213b316c0346e678b723308ab6ca5bca99185&",
+      "footerIconUrl": "",
+      "footerText": ""
+    },
+    "welcomeMessage": {
+      "content": "Welcome {USER}. Our support team will assist you in {GUILD_NAME}.\n\nWait for a moment our Staffs will help you!!",
+      "embedTitle": "Support Ticket Created!",
+      "embedDescription": "Please describe your issue in detail. Staff will respond shortly.",
+      "color": "#e11d48"
+    },
+    "buttons": [
+      {
+        "id": "support_btn",
+        "label": "Get Support",
+        "style": "Danger",
+        "emoji": "<:952298discordstaff:1560162157860102264>",
+        "customId": "ticket_create_support"
+      }
+    ],
+    "deployedMessageId": "1560747970851381321",
+    "deployedChannelId": "1559556554620010558",
+    "extraMessageContent": "",
+    "permissions": {
+      "addReactions": true,
+      "attachFiles": true,
+      "embedLinks": false,
+      "sendVoiceMessages": true,
+      "useExternalEmojis": true,
+      "useExternalStickers": true,
+      "useAppCommands": false
+    }
+  }
+}
