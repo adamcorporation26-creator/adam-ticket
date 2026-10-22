@@ -30,6 +30,15 @@ export function createServer(port = 3001) {
 
   // --- API ROUTES ---
 
+  // Admin Authentication
+  app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body || {};
+    if (username === 'adamadmin' && password === 'adam0626') {
+      return res.json({ success: true, user: 'adamadmin' });
+    }
+    return res.status(401).json({ success: false, message: 'Invalid username or password' });
+  });
+
   // Bot Status
   app.get('/api/bot/status', (req, res) => {
     const client = getBotClient();

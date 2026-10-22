@@ -16,7 +16,8 @@ import {
   Search,
   Check,
   Plus,
-  Smile
+  Smile,
+  ExternalLink
 } from 'lucide-react';
 
 export default function Sidebar({ currentTab, setCurrentTab, serverInfo, selectedGuildId: propGuildId, onSelectGuild }) {
@@ -221,15 +222,25 @@ export default function Sidebar({ currentTab, setCurrentTab, serverInfo, selecte
 
       {/* Sidebar Footer */}
       <div className="p-3 border-t border-zinc-800/60 space-y-2">
-        <button className="w-full flex items-center gap-2 px-3 py-2 text-xs text-zinc-400 hover:text-zinc-200 rounded-lg hover:bg-zinc-800/40 transition-all">
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Restart Tutorial</span>
-        </button>
+        <a 
+          href={botInviteUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-white bg-[#5865F2] hover:bg-[#4752C4] rounded-xl shadow-md shadow-[#5865F2]/20 transition-all cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Bot className="w-4 h-4" />
+            <span>Invite Bot to Server</span>
+          </div>
+          <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+        </a>
+
         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Crown className="w-4 h-4 text-yellow-500 fill-yellow-500/30" />
-            <span className="text-xs font-bold text-yellow-400">Get Premium</span>
+            <span className="text-xs font-bold text-yellow-400">ADAM CORPORATION</span>
           </div>
+          <span className="text-[10px] text-zinc-500 font-mono">v2.0</span>
         </div>
       </div>
     </aside>

@@ -8,8 +8,12 @@ import TicketHistory from './components/TicketHistory.jsx';
 import Settings from './components/Settings.jsx';
 import AuditLogs from './components/AuditLogs.jsx';
 import ServerEmojis from './components/ServerEmojis.jsx';
+import LoginPage from './components/LoginPage.jsx';
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('adam_admin_auth') === 'authenticated';
+  });
   const [currentTab, setCurrentTab] = useState('panels'); // Default to Panels
   const [stats, setStats] = useState(null);
   const [panels, setPanels] = useState({});
@@ -150,6 +154,16 @@ export default function App() {
     emojis: 'Server Emojis'
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('adam_admin_auth');
+    localStorage.removeItem('adam_admin_user');
+    setIsAuthenticated(false);
+  };
+
+  if (!isAuthenticated) {
+    return <LoginPage onLoginSuccess={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="flex min-h-screen bg-[#0b0b0d] text-zinc-100 font-sans">
       <Sidebar 
@@ -165,6 +179,7 @@ export default function App() {
           botStatus={botStatus} 
           currentTabTitle={tabTitles[currentTab] || 'Server Management'} 
           activeServer={stats?.activeServer}
+          onLogout={handleLogout}
         />
 
         <main className="flex-1 overflow-y-auto pb-12">
