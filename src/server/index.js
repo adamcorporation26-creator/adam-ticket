@@ -303,43 +303,51 @@ export function createServer(port = 3001) {
   app.get('/api/discord/categories', (req, res) => {
     const client = getBotClient();
     const guildId = req.query.guildId;
+    const fallbackCategories = [
+      { id: 'cat-tickets', name: '╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬' },
+      { id: 'cat-support', name: '╰--- 𝐒𝐮𝐩𝐩𝐨𝐫𝐭' },
+      { id: 'cat-1', name: 'Purchase' },
+      { id: 'cat-2', name: 'Tickets' },
+      { id: 'cat-3', name: 'Support' }
+    ];
+
     if (!client || !client.isReady()) {
-      return res.json([
-        { id: 'cat-1', name: 'Purchase' },
-        { id: 'cat-2', name: 'Tickets' },
-        { id: 'cat-3', name: 'Support' }
-      ]);
+      return res.json(fallbackCategories);
     }
     const guild = (guildId && client.guilds.cache.has(guildId)) 
       ? client.guilds.cache.get(guildId) 
       : client.guilds.cache.first();
 
-    if (!guild) return res.json([]);
+    if (!guild) return res.json(fallbackCategories);
     const categories = guild.channels.cache
       .filter(c => c.type === 4)
       .map(c => ({ id: c.id, name: c.name }));
-    res.json(categories);
+    res.json(categories.length > 0 ? categories : fallbackCategories);
   });
 
   app.get('/api/discord/channels', (req, res) => {
     const client = getBotClient();
     const guildId = req.query.guildId;
+    const fallbackChannels = [
+      { id: '1521227405468106779', name: 'ticket-logs', type: 'text' },
+      { id: '1559556554620010558', name: '𝐒𝐮𝐩𝐩𝐨𝐫𝐭-𝐓𝐢𝐜𝐤𝐞𝐭-𝐋𝐨𝐠𝐬', type: 'text' },
+      { id: '1553095078460002455', name: 'purchase-here', type: 'text' },
+      { id: '1553095078460002456', name: 'support-here', type: 'text' },
+      { id: '123456789', name: 'general', type: 'text' }
+    ];
+
     if (!client || !client.isReady()) {
-      return res.json([
-        { id: '123456789', name: 'general', type: 'text' },
-        { id: '987654321', name: 'ticket-logs', type: 'text' },
-        { id: '555555555', name: 'purchase-here', type: 'text' }
-      ]);
+      return res.json(fallbackChannels);
     }
     const guild = (guildId && client.guilds.cache.has(guildId)) 
       ? client.guilds.cache.get(guildId) 
       : client.guilds.cache.first();
 
-    if (!guild) return res.json([]);
+    if (!guild) return res.json(fallbackChannels);
     const channels = guild.channels.cache
       .filter(c => c.isTextBased())
       .map(c => ({ id: c.id, name: c.name, type: c.type === 0 ? 'text' : 'other' }));
-    res.json(channels);
+    res.json(channels.length > 0 ? channels : fallbackChannels);
   });
 
   app.get('/api/discord/roles', (req, res) => {

@@ -26,7 +26,7 @@ export async function initBot(broadcastWs) {
   const token = process.env.DISCORD_TOKEN;
 
   if (!token) {
-    console.warn('[Discord Bot] DISCORD_TOKEN is missing in .env! Bot will running in Web-Only Mode until token is set.');
+    console.warn('[Discord Bot] DISCORD_TOKEN is missing in environment variables! Please configure DISCORD_TOKEN in Render Environment.');
     return null;
   }
 

@@ -318,6 +318,48 @@ export default function PanelEditor({
         <p className="text-xs text-zinc-400 font-medium">Edit and customize your ticket panels with multiple embeds and categories.</p>
       </div>
 
+      {/* Live Server & Channel Counts Status Banner */}
+      <div className="bg-[#151518] border border-zinc-800/90 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-md">
+        <div className="flex items-center gap-3">
+          <img src="/adam_corp_logo.jpg" alt="ADAM CORPORATION" className="w-10 h-10 rounded-xl object-cover border border-zinc-700/80 shadow" />
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-sm text-white">ADAM CORPORATION</span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Server
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-400">Live ticket panel configuration & Discord deployment</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="bg-[#1c1c20] border border-zinc-800 px-3 py-1.5 rounded-xl flex items-center gap-2">
+            <Layers className="w-3.5 h-3.5 text-indigo-400" />
+            <div className="text-left">
+              <span className="block text-[10px] uppercase font-bold text-zinc-400">Categories</span>
+              <span className="text-xs font-black text-white">{categories.length} loaded</span>
+            </div>
+          </div>
+
+          <div className="bg-[#1c1c20] border border-zinc-800 px-3 py-1.5 rounded-xl flex items-center gap-2">
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="text-left">
+              <span className="block text-[10px] uppercase font-bold text-zinc-400">Text Channels</span>
+              <span className="text-xs font-black text-white">{channels.length} loaded</span>
+            </div>
+          </div>
+
+          <div className="bg-[#1c1c20] border border-zinc-800 px-3 py-1.5 rounded-xl flex items-center gap-2">
+            <Hash className="w-3.5 h-3.5 text-sky-400" />
+            <div className="text-left">
+              <span className="block text-[10px] uppercase font-bold text-zinc-400">Log Channels</span>
+              <span className="text-xs font-black text-white">2 configured</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Action Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-zinc-800/80">
         <div className="flex flex-wrap items-center gap-2.5">
