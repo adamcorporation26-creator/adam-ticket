@@ -60,14 +60,20 @@ export function createServer(port = 3001) {
   });
 
   // Overview / Analytics Stats (Image 5 replica data)
-  app.get('/api/stats', (req, res) => {
+  app.get('/api/stats', async (req, res) => {
     const tickets = dbTickets.get('tickets', []);
     const settings = dbSettings.all();
     const client = getBotClient();
     const guildId = req.query.guildId;
     const guild = (guildId && client?.guilds?.cache?.has(guildId))
       ? client.guilds.cache.get(guildId)
-      : client?.guilds?.cache?.first();
+      : (client?.guilds?.cache?.find(g => g.id === '1521227404335513610' || g.name.toLowerCase().includes('adam')) || client?.guilds?.cache?.first());
+
+    if (guild && guild.channels?.cache?.size <= 5) {
+      try {
+        await guild.channels.fetch();
+      } catch (e) {}
+    }
 
     const openCount = tickets.filter(t => t.status === 'open').length;
     const inProgressCount = tickets.filter(t => t.status === 'in_progress').length;
@@ -77,10 +83,10 @@ export function createServer(port = 3001) {
     const realEmojisCount = guild ? guild.emojis.cache.size : (settings.emojisCount || 21);
 
     // Channel types: 4 = Category, 0 = Text, 2 = Voice
-    const categoriesCount = guild ? guild.channels.cache.filter(c => c.type === 4).size : 6;
-    const textChannelsCount = guild ? guild.channels.cache.filter(c => c.isTextBased() && c.type !== 4).size : 28;
-    const voiceChannelsCount = guild ? guild.channels.cache.filter(c => c.type === 2).size : 5;
-    const totalChannelsCount = guild ? guild.channels.cache.size : (settings.channelsCount || 39);
+    const categoriesCount = guild ? guild.channels.cache.filter(c => c.type === 4).size : 14;
+    const textChannelsCount = guild ? guild.channels.cache.filter(c => c.isTextBased() && c.type !== 4).size : 86;
+    const voiceChannelsCount = guild ? guild.channels.cache.filter(c => c.type === 2).size : 12;
+    const totalChannelsCount = guild ? guild.channels.cache.size : 113;
 
     const activeServer = guild ? {
       id: guild.id,
@@ -92,14 +98,14 @@ export function createServer(port = 3001) {
       voiceChannelsCount,
       channelsCount: totalChannelsCount
     } : {
-      id: 'default',
+      id: '1521227404335513610',
       name: 'ADAM CORPORATION',
       iconUrl: '/adam_corp_logo.jpg',
       memberCount: 579,
-      categoriesCount,
-      textChannelsCount,
-      voiceChannelsCount,
-      channelsCount: totalChannelsCount
+      categoriesCount: 14,
+      textChannelsCount: 86,
+      voiceChannelsCount: 12,
+      channelsCount: 113
     };
 
     res.json({
@@ -309,7 +315,7 @@ export function createServer(port = 3001) {
     res.json({ guilds, botInviteUrl });
   });
 
-  app.get('/api/discord/categories', (req, res) => {
+  app.get('/api/discord/categories', async (req, res) => {
     const client = getBotClient();
     const guildId = req.query.guildId;
     const fallbackCategories = [
@@ -325,16 +331,23 @@ export function createServer(port = 3001) {
     }
     const guild = (guildId && client.guilds.cache.has(guildId)) 
       ? client.guilds.cache.get(guildId) 
-      : client.guilds.cache.first();
+      : (client.guilds.cache.find(g => g.id === '1521227404335513610' || g.name.toLowerCase().includes('adam')) || client.guilds.cache.first());
 
     if (!guild) return res.json(fallbackCategories);
+
+    try {
+      if (guild.channels.cache.size <= 5) {
+        await guild.channels.fetch();
+      }
+    } catch (e) {}
+
     const categories = guild.channels.cache
       .filter(c => c.type === 4)
       .map(c => ({ id: c.id, name: c.name }));
     res.json(categories.length > 0 ? categories : fallbackCategories);
   });
 
-  app.get('/api/discord/channels', (req, res) => {
+  app.get('/api/discord/channels', async (req, res) => {
     const client = getBotClient();
     const guildId = req.query.guildId;
     const fallbackChannels = [
@@ -350,11 +363,18 @@ export function createServer(port = 3001) {
     }
     const guild = (guildId && client.guilds.cache.has(guildId)) 
       ? client.guilds.cache.get(guildId) 
-      : client.guilds.cache.first();
+      : (client.guilds.cache.find(g => g.id === '1521227404335513610' || g.name.toLowerCase().includes('adam')) || client.guilds.cache.first());
 
     if (!guild) return res.json(fallbackChannels);
+
+    try {
+      if (guild.channels.cache.size <= 5) {
+        await guild.channels.fetch();
+      }
+    } catch (e) {}
+
     const channels = guild.channels.cache
-      .filter(c => c.isTextBased())
+      .filter(c => c.isTextBased() && c.type !== 4)
       .map(c => ({ id: c.id, name: c.name, type: c.type === 0 ? 'text' : 'other' }));
     res.json(channels.length > 0 ? channels : fallbackChannels);
   });
