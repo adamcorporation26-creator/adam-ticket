@@ -9,74 +9,155 @@ import {
   TextInputBuilder,
   TextInputStyle,
   AttachmentBuilder,
-  MessageFlags
+  MessageFlags,
+  StringSelectMenuBuilder
 } from 'discord.js';
 import { dbPanels, dbTickets, dbSettings, dbAuditLogs } from '../db/database.js';
+import { generateDiscordHtmlTranscript } from './transcriptGenerator.js';
 
 export function normalizeName(str) {
   if (!str) return '';
   return str.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
+/**
+ * Shows interactive Discord modal intake form before creating ticket
+ */
+export async function showTicketIntakeModal(interaction, panel, categoryType = 'buy') {
+  const catNorm = (categoryType || 'buy').toLowerCase();
+  const modal = new ModalBuilder()
+    .setCustomId(`ticket_intake_modal_${panel.id || 'default'}_${categoryType}`);
+
+  if (catNorm.includes('support') || catNorm.includes('help')) {
+    modal.setTitle('🛠️ Support Ticket Intake');
+
+    const subjectInput = new TextInputBuilder()
+      .setCustomId('issue_subject')
+      .setLabel('Brief Issue Summary')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('e.g. Login issue / Payment not credited')
+      .setRequired(true)
+      .setMaxLength(100);
+
+    const detailsInput = new TextInputBuilder()
+      .setCustomId('issue_details')
+      .setLabel('Detailed Description of Issue')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Please describe what happened in detail...')
+      .setRequired(true)
+      .setMaxLength(1000);
+
+    const refInput = new TextInputBuilder()
+      .setCustomId('reference')
+      .setLabel('Order ID or Prior Ticket Ref (Optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('e.g. Order #1234 or N/A')
+      .setRequired(false)
+      .setMaxLength(100);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(subjectInput),
+      new ActionRowBuilder().addComponents(detailsInput),
+      new ActionRowBuilder().addComponents(refInput)
+    );
+  } else if (catNorm.includes('bill') || catNorm.includes('invoice') || catNorm.includes('refund')) {
+    modal.setTitle('💼 Billing & Invoice Intake');
+
+    const invoiceInput = new TextInputBuilder()
+      .setCustomId('invoice_id')
+      .setLabel('Invoice or Transaction ID')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('e.g. INV-2026 or Crypto TXID')
+      .setRequired(true)
+      .setMaxLength(100);
+
+    const issueInput = new TextInputBuilder()
+      .setCustomId('billing_issue')
+      .setLabel('Billing Details / Question')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Explain your billing question, refund, or invoice request...')
+      .setRequired(true)
+      .setMaxLength(1000);
+
+    const notesInput = new TextInputBuilder()
+      .setCustomId('notes')
+      .setLabel('Additional Information (Optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Account email, username, etc.')
+      .setRequired(false)
+      .setMaxLength(200);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(invoiceInput),
+      new ActionRowBuilder().addComponents(issueInput),
+      new ActionRowBuilder().addComponents(notesInput)
+    );
+  } else {
+    // Default to Buy / Purchase intake
+    modal.setTitle('🛒 Purchase Ticket Intake');
+
+    const productInput = new TextInputBuilder()
+      .setCustomId('product_name')
+      .setLabel('What product or package do you want?')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('e.g. Diamond Package / 10k Credits / 1 Month Sub')
+      .setRequired(true)
+      .setMaxLength(100);
+
+    const paymentInput = new TextInputBuilder()
+      .setCustomId('payment_method')
+      .setLabel('Preferred Payment Method & Currency')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('e.g. UPI, PayPal, Crypto (USDT), Card')
+      .setRequired(true)
+      .setMaxLength(100);
+
+    const notesInput = new TextInputBuilder()
+      .setCustomId('notes')
+      .setLabel('Additional Notes / Order Reference')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Any specific instructions, country, or promo code...')
+      .setRequired(false)
+      .setMaxLength(500);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(productInput),
+      new ActionRowBuilder().addComponents(paymentInput),
+      new ActionRowBuilder().addComponents(notesInput)
+    );
+  }
+
+  await interaction.showModal(modal);
+}
+
+/**
+ * Handles Button clicks to open a ticket (shows intake modal or creates ticket)
+ */
 export async function handleTicketButtonInteraction(interaction, broadcastWs) {
   if (!interaction.isButton()) return;
 
   const { customId, guild, user, member } = interaction;
-
-  if (!customId.startsWith('ticket_create_')) return;
-  if (!guild) return;
-
-  // Safe interaction reply helper that handles deferred/non-deferred state and catches expired token errors
-  const safeReply = async (payload) => {
-    try {
-      if (interaction.deferred || interaction.replied) {
-        return await interaction.editReply(payload);
-      } else {
-        const replyPayload = typeof payload === 'string' ? { content: payload } : { ...payload };
-        return await interaction.reply({ ...replyPayload, flags: MessageFlags.Ephemeral });
-      }
-    } catch (e) {
-      if (e.code !== 10062 && e.code !== 40060) {
-        console.warn('[Ticket Button] Reply error:', e.message);
-      }
-    }
-  };
-
-  // Acknowledge interaction quickly to avoid timeout
-  try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    }
-  } catch (err) {
-    if (err.code === 10062 || err.code === 40060) {
-      console.warn(`[Discord Bot] Ticket interaction expired or already acknowledged: ${err.message}`);
-      return;
-    }
-    console.error('[Discord Bot] Failed to defer ticket reply:', err);
-    return;
-  }
+  if (!customId.startsWith('ticket_create_') || !guild) return;
 
   try {
     const panels = dbPanels.all();
-    // Find panel that matches button customId or pick default
     const panelKey = Object.keys(panels).find(k => 
       panels[k].buttons?.some(b => b.customId === customId)
     ) || Object.keys(panels)[0];
 
     const panel = panels[panelKey];
-
     if (!panel) {
-      return safeReply({ content: '❌ Ticket panel configuration not found.' });
+      return interaction.reply({ content: '❌ Ticket panel configuration not found.', flags: MessageFlags.Ephemeral });
     }
 
-    // Check blocked roles
+    // Check blocked roles immediately
     if (panel.blockedRoles && panel.blockedRoles.length > 0) {
       const hasBlockedRole = member.roles.cache.some(r => {
         const rNorm = normalizeName(r.name);
         return panel.blockedRoles.some(b => normalizeName(b) === rNorm || b === r.id);
       });
       if (hasBlockedRole) {
-        return safeReply({ content: '🚫 You are blocked from creating tickets.' });
+        return interaction.reply({ content: '🚫 You are blocked from creating tickets.', flags: MessageFlags.Ephemeral });
       }
     }
 
@@ -89,7 +170,6 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
     );
 
     if (existingOpenTicket) {
-      // Verify if the active ticket channel still exists in Discord
       let existingChannel = guild.channels.cache.get(existingOpenTicket.channelId);
       if (!existingChannel) {
         try {
@@ -100,11 +180,11 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       }
 
       if (existingChannel) {
-        return safeReply({
-          content: `❌ **Ticket Limit Reached**: You already have an open ticket in <#${existingOpenTicket.channelId}>!\n\nPlease resolve or close your existing ticket before opening a new one.`
+        return interaction.reply({
+          content: `❌ **Ticket Limit Reached**: You already have an open ticket in <#${existingOpenTicket.channelId}>!\n\nPlease resolve or close your existing ticket before opening a new one.`,
+          flags: MessageFlags.Ephemeral
         });
       } else {
-        // Channel was deleted manually from Discord, so update ticket status in DB to 'closed'
         dbTickets.updateTicket({
           id: existingOpenTicket.id,
           status: 'closed',
@@ -113,8 +193,176 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       }
     }
 
-    // Parse custom ticket channel name e.g. "buy-{USER_NAME}"
-    let ticketChannelName = panel.customTicketName || 'buy-{USER_NAME}';
+    // Determine category type from customId (e.g. ticket_create_support -> 'support')
+    const categoryType = customId.replace('ticket_create_', '') || 'buy';
+
+    // If modal is explicitly disabled on panel, directly create ticket
+    if (panel.disableIntakeModal) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      return await createTicketChannelAndPost({ interaction, panel, categoryType, intakeData: null, broadcastWs });
+    }
+
+    // Show intake modal
+    return await showTicketIntakeModal(interaction, panel, categoryType);
+  } catch (err) {
+    console.error('[Ticket Button] Error processing:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: `❌ Error opening ticket intake: ${err.message}`, flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Handles Dropdown Select Menu interactions on multi-category panels
+ */
+export async function handleTicketSelectMenuInteraction(interaction, broadcastWs) {
+  if (!interaction.isStringSelectMenu()) return;
+
+  const { customId, guild, user, member, values } = interaction;
+  if (!customId.startsWith('ticket_select_menu_') || !guild) return;
+
+  try {
+    const panelId = customId.replace('ticket_select_menu_', '');
+    const panel = dbPanels.get(panelId) || Object.values(dbPanels.all())[0];
+    if (!panel) {
+      return interaction.reply({ content: '❌ Ticket panel configuration not found.', flags: MessageFlags.Ephemeral });
+    }
+
+    // Check blocked roles immediately
+    if (panel.blockedRoles && panel.blockedRoles.length > 0) {
+      const hasBlockedRole = member.roles.cache.some(r => {
+        const rNorm = normalizeName(r.name);
+        return panel.blockedRoles.some(b => normalizeName(b) === rNorm || b === r.id);
+      });
+      if (hasBlockedRole) {
+        return interaction.reply({ content: '🚫 You are blocked from creating tickets.', flags: MessageFlags.Ephemeral });
+      }
+    }
+
+    // Check if the user already has an active open ticket in this server
+    const tickets = dbTickets.get('tickets', []);
+    const existingOpenTicket = tickets.find(t => 
+      t.authorId === user.id && 
+      t.guildId === guild.id && 
+      (t.status === 'open' || t.status === 'in_progress')
+    );
+
+    if (existingOpenTicket) {
+      let existingChannel = guild.channels.cache.get(existingOpenTicket.channelId);
+      if (!existingChannel) {
+        try {
+          existingChannel = await guild.channels.fetch(existingOpenTicket.channelId).catch(() => null);
+        } catch (e) {
+          existingChannel = null;
+        }
+      }
+
+      if (existingChannel) {
+        return interaction.reply({
+          content: `❌ **Ticket Limit Reached**: You already have an open ticket in <#${existingOpenTicket.channelId}>!\n\nPlease resolve or close your existing ticket before opening a new one.`,
+          flags: MessageFlags.Ephemeral
+        });
+      } else {
+        dbTickets.updateTicket({
+          id: existingOpenTicket.id,
+          status: 'closed',
+          resolvedTime: new Date().toISOString()
+        });
+      }
+    }
+
+    const selectedOption = values?.[0] || 'buy';
+    const categoryType = selectedOption.replace('ticket_select_', '');
+
+    if (panel.disableIntakeModal) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      return await createTicketChannelAndPost({ interaction, panel, categoryType, intakeData: null, broadcastWs });
+    }
+
+    return await showTicketIntakeModal(interaction, panel, categoryType);
+  } catch (err) {
+    console.error('[Ticket Select Menu] Error processing:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: `❌ Error opening ticket intake: ${err.message}`, flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Handles submitted modal questionnaires and forwards into ticket creation
+ */
+export async function handleTicketModalSubmit(interaction, broadcastWs) {
+  if (!interaction.isModalSubmit()) return;
+  const { customId, guild } = interaction;
+  if (!customId.startsWith('ticket_intake_modal_') || !guild) return;
+
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    // Format: ticket_intake_modal_${panelId}_${categoryType}
+    const parts = customId.split('_');
+    const categoryType = parts[parts.length - 1] || 'buy';
+    const panelId = parts.slice(3, parts.length - 1).join('_') || 'default-purchase-panel';
+
+    const panel = dbPanels.get(panelId) || Object.values(dbPanels.all())[0];
+    if (!panel) {
+      return interaction.editReply({ content: '❌ Panel configuration not found.' });
+    }
+
+    const safeGetField = (fieldId) => {
+      try {
+        return interaction.fields.getTextInputValue(fieldId)?.trim() || null;
+      } catch (e) {
+        return null;
+      }
+    };
+
+    const intakeData = {
+      categoryType,
+      product: safeGetField('product_name'),
+      paymentMethod: safeGetField('payment_method'),
+      issueSubject: safeGetField('issue_subject'),
+      issueDetails: safeGetField('issue_details'),
+      invoiceId: safeGetField('invoice_id'),
+      billingIssue: safeGetField('billing_issue'),
+      reference: safeGetField('reference'),
+      notes: safeGetField('notes'),
+      submittedAt: new Date().toISOString()
+    };
+
+    return await createTicketChannelAndPost({ interaction, panel, categoryType, intakeData, broadcastWs });
+  } catch (err) {
+    console.error('[Ticket Modal Submit] Error:', err);
+    return interaction.editReply({ content: `❌ Failed to create ticket from form: ${err.message}` }).catch(() => {});
+  }
+}
+
+/**
+ * Core ticket channel creation, permission overwrites, and welcome posting
+ */
+export async function createTicketChannelAndPost({ interaction, panel, categoryType = 'buy', intakeData = null, broadcastWs }) {
+  const { guild, user } = interaction;
+
+  const safeReply = async (payload) => {
+    try {
+      if (interaction.deferred || interaction.replied) {
+        return await interaction.editReply(payload);
+      } else {
+        const replyPayload = typeof payload === 'string' ? { content: payload } : { ...payload };
+        return await interaction.reply({ ...replyPayload, flags: MessageFlags.Ephemeral });
+      }
+    } catch (e) {
+      if (e.code !== 10062 && e.code !== 40060) {
+        console.warn('[Ticket Creation] Reply error:', e.message);
+      }
+    }
+  };
+
+  try {
+    const tickets = dbTickets.get('tickets', []);
+
+    // Parse custom ticket channel name e.g. "buy-{USER_NAME}" or "support-{USER_NAME}"
+    let ticketChannelName = panel.customTicketName || `${categoryType}-{USER_NAME}`;
     ticketChannelName = ticketChannelName
       .replace(/{USER_NAME}/g, user.username.toLowerCase())
       .replace(/{USERNAME}/g, user.username.toLowerCase())
@@ -127,15 +375,13 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
     let ticketChannel;
 
     if (panel.channelType === 'thread') {
-      // Thread creation
       ticketChannel = await interaction.channel.threads.create({
         name: ticketChannelName,
-        autoArchiveDuration: 1440, // 24 hours
+        autoArchiveDuration: 1440,
         reason: `Ticket created by ${user.tag}`
       });
       await ticketChannel.members.add(user.id);
     } else {
-      // Text channel creation directly inside configured category
       const targetCategoryNorm = normalizeName(panel.category || 'tickets');
       let categoryChannel = guild.channels.cache.find(c => 
         c.type === ChannelType.GuildCategory && (
@@ -145,7 +391,6 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
         )
       );
 
-      // Try fetching channels if not in cache
       if (!categoryChannel && panel.category) {
         try {
           const fetchedChannels = await guild.channels.fetch().catch(() => null);
@@ -161,7 +406,6 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
         } catch (e) {}
       }
 
-      // Create category if not exists
       if (!categoryChannel && panel.category) {
         try {
           categoryChannel = await guild.channels.create({
@@ -173,7 +417,6 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
         }
       }
 
-      // Permission overwrites: deny @everyone, allow user & support roles
       const permissionOverwrites = [
         {
           id: guild.id, // @everyone
@@ -198,7 +441,6 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
         }
       ];
 
-      // Add support roles permission
       if (panel.supportRoles && panel.supportRoles.length > 0) {
         guild.roles.cache.forEach(role => {
           const roleNorm = normalizeName(role.name);
@@ -224,7 +466,7 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       });
     }
 
-    // Build Support Roles ping text (@Founder, @Staff, @Manager)
+    // Support Roles ping text
     const supportRolesList = panel.supportRoles || ['Founder', 'Staff', 'Manager'];
     const pingMentions = [];
 
@@ -238,18 +480,15 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
     }
 
     const rolePingsText = pingMentions.length > 0 ? pingMentions.join(' ') : '@Founder @Staff @Manager';
-
     const categoryName = panel.category || 'Purchase';
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) + 
-      ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' IST';
 
     const thumbnailUrl = panel.embed?.thumbnailUrl && panel.embed.thumbnailUrl.trim() !== ''
       ? panel.embed.thumbnailUrl.trim()
       : (guild.iconURL({ extension: 'gif' }) || guild.iconURL({ extension: 'png' }) || undefined);
 
-    // Build description based on panel type
-    const isSupport = panel.id && panel.id.toLowerCase().includes('support');
+    const isSupport = categoryType.toLowerCase().includes('support') || (panel.id && panel.id.toLowerCase().includes('support'));
+    const isBilling = categoryType.toLowerCase().includes('bill') || categoryType.toLowerCase().includes('invoice');
+
     const embedDescription = isSupport
       ? `<@${user.id}>\n\n` +
         `**Thank you for reaching out to ADAM CORPORATION.**\n` +
@@ -261,6 +500,16 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
         `**House rules**\n` +
         `🔸 Keep the thread focused — avoid unnecessary pings.\n` +
         `🔸 Stay respectful; abuse may lead to **restriction**.`
+      : isBilling
+      ? `<@${user.id}>\n\n` +
+        `**Thank you for contacting ADAM CORPORATION Billing Department.**\n` +
+        `This is your **private billing channel**. Financial staff will review your inquiry shortly.\n\n` +
+        `**Please have ready**\n` +
+        `🔹 Your **Invoice Number** or Transaction ID\n` +
+        `🔹 Proof of payment / screenshot if applicable\n\n` +
+        `**House rules**\n` +
+        `🔸 Never share full credit card numbers or account passwords.\n` +
+        `🔸 Stay respectful to staff.`
       : `<@${user.id}>\n\n` +
         `**Thank you for choosing ADAM CORPORATION.**\n` +
         `This is your **private purchase channel**. Staff who were pinged will assist with **payment** and **access** shortly.\n\n` +
@@ -284,16 +533,17 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       welcomeEmbed.setThumbnail(thumbnailUrl);
     }
 
-    // Action buttons inside ticket channel (Claim ticket / Close ticket)
     const controlRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`ticket_claim_${ticketChannel.id}`)
         .setLabel('Claim ticket')
-        .setStyle(ButtonStyle.Primary),
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🙋‍♂️'),
       new ButtonBuilder()
         .setCustomId(`ticket_close_${ticketChannel.id}`)
         .setLabel('Close ticket')
         .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔒')
     );
 
     // Send role pings + embed + buttons
@@ -303,18 +553,43 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       components: [controlRow]
     });
 
-    // Send prompt message below buttons (dynamic per panel type)
+    // Send Ticket Intake Details Embed if questionnaire was filled
+    if (intakeData) {
+      const intakeEmbed = new EmbedBuilder()
+        .setTitle(`📋 Ticket Intake Details • ${categoryType.toUpperCase()}`)
+        .setColor(isSupport ? '#38bdf8' : isBilling ? '#a855f7' : '#eab308')
+        .setAuthor({ 
+          name: `${user.tag} (${user.id})`, 
+          iconURL: user.displayAvatarURL() 
+        })
+        .setTimestamp();
+
+      if (intakeData.product) intakeEmbed.addFields({ name: '🛍️ Requested Product / Package', value: `\`\`\`${intakeData.product}\`\`\``, inline: false });
+      if (intakeData.paymentMethod) intakeEmbed.addFields({ name: '💳 Preferred Payment Method', value: `\`\`\`${intakeData.paymentMethod}\`\`\``, inline: true });
+      if (intakeData.issueSubject) intakeEmbed.addFields({ name: '📌 Issue Subject', value: `\`\`\`${intakeData.issueSubject}\`\`\``, inline: false });
+      if (intakeData.issueDetails) intakeEmbed.addFields({ name: '📝 Detailed Description', value: intakeData.issueDetails, inline: false });
+      if (intakeData.invoiceId) intakeEmbed.addFields({ name: '🧾 Invoice / Transaction Ref', value: `\`\`\`${intakeData.invoiceId}\`\`\``, inline: true });
+      if (intakeData.billingIssue) intakeEmbed.addFields({ name: '💼 Billing Inquiry', value: intakeData.billingIssue, inline: false });
+      if (intakeData.reference) intakeEmbed.addFields({ name: '🔗 Order Reference / ID', value: `\`\`\`${intakeData.reference}\`\`\``, inline: true });
+      if (intakeData.notes) intakeEmbed.addFields({ name: '📋 Additional Notes', value: intakeData.notes, inline: false });
+
+      await ticketChannel.send({ embeds: [intakeEmbed] });
+    }
+
+    // Prompt message below
     const promptMessage = isSupport
-      ? '**How can we help you?** Reply here with details about your issue and staff will assist you shortly.'
-      : '**What would you like to purchase?** Reply here with the product and any notes for staff.';
+      ? '**How can we help you?** Reply here with extra details or screenshots and staff will assist you shortly.'
+      : isBilling
+      ? '**Billing support is ready.** Staff will verify your transaction details shortly.'
+      : '**What would you like to purchase?** Reply here with any special instructions for staff.';
     await ticketChannel.send({ content: promptMessage });
 
-    // Save ticket to JSON DB
+    // Save ticket to DB
     const newTicket = {
       id: `ticket-${ticketNumber}`,
       ticketNumber,
       ticketName: ticketChannelName,
-      topic: panel.category || 'Purchase',
+      topic: categoryType ? categoryType.charAt(0).toUpperCase() + categoryType.slice(1) : (panel.category || 'Purchase'),
       status: 'open',
       channelId: ticketChannel.id,
       guildId: guild.id,
@@ -324,6 +599,7 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       openTime: new Date().toISOString(),
       resolvedTime: null,
       panelId: panel.id,
+      intakeData: intakeData || null,
       messages: [
         { author: 'System', content: `Ticket created by ${user.tag}`, timestamp: new Date().toISOString() }
       ]
@@ -331,12 +607,11 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
 
     dbTickets.addTicket(newTicket);
 
-    // Notify dashboard via WebSocket
     if (broadcastWs) {
       broadcastWs('ticket_created', newTicket);
     }
 
-    // Log to log channel (for both Embed 1 & Embed 2)
+    // Log to log channel
     const targetLogName = normalizeName((panel.openLogChannel || 'ticket-logs').replace('#', ''));
     let logChannel = guild.channels.cache.find(c => 
       c.isTextBased() && (c.id === panel.openLogChannel || normalizeName(c.name) === targetLogName)
@@ -364,10 +639,17 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
         .addFields(
           { name: '🎫 Ticket', value: `<#${ticketChannel.id}>`, inline: true },
           { name: '👤 Opened By', value: `<@${user.id}> (${user.tag})`, inline: true },
-          { name: '📁 Category', value: panel.category || 'Purchase', inline: true },
+          { name: '📁 Category', value: newTicket.topic, inline: true },
           { name: '📋 Panel Option', value: panel.name || panel.id, inline: true }
         )
         .setTimestamp();
+
+      if (intakeData?.product) {
+        logEmbed.addFields({ name: '🛍️ Order', value: intakeData.product, inline: true });
+      } else if (intakeData?.issueSubject) {
+        logEmbed.addFields({ name: '📌 Subject', value: intakeData.issueSubject, inline: true });
+      }
+
       await logChannel.send({ embeds: [logEmbed] }).catch((e) => console.log('Error sending open log:', e.message));
     }
 
@@ -485,6 +767,9 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
       }
     }
 
+    const serverBaseUrl = (process.env.APP_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 3001}`).replace(/\/$/, '');
+    const webTranscriptUrl = targetTicket ? `${serverBaseUrl}/transcripts/${targetTicket.id}` : `${serverBaseUrl}/transcripts/${channel.id}`;
+
     // Send DM Receipt & 1-5 Star Feedback buttons to Ticket Author
     if (targetTicket && targetTicket.authorId) {
       try {
@@ -494,6 +779,7 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
             .setTitle('How was your experience?')
             .setDescription(
               `Your **${targetTicket.topic || 'Purchase'}** ticket \`${channel.name}\` was closed.\n\n` +
+              `🌐 **Transcript**: [Click here to view your transcript online](${webTranscriptUrl})\n\n` +
               `⭐ Tap **1–5** below to rate your experience.\n` +
               `⭐ **1–3 stars**: we'll ask for a short reason so we can improve.\n` +
               `⭐ **4–5 stars**: thank you — your rating is logged for the team.`
@@ -542,17 +828,32 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
     if (targetTicket && messageList.length > 0) {
       targetTicket.messages = messageList.map(m => {
         let content = m.cleanContent || m.content || '';
-        if (m.attachments && m.attachments.size > 0) {
-          const attachNames = m.attachments.map(a => `[Attachment: ${a.name}]`).join(' ');
-          content = content ? `${content} ${attachNames}` : attachNames;
-        }
+        const attachments = m.attachments ? Array.from(m.attachments.values()).map(a => ({ name: a.name, url: a.url })) : [];
         return {
           author: m.author ? m.author.tag : 'System',
+          authorAvatar: m.author ? m.author.displayAvatarURL() : undefined,
           content: content || '[Empty / System Message]',
+          attachments,
           timestamp: new Date(m.createdTimestamp).toISOString()
         };
       });
-      dbTickets.updateTicket(targetTicket);
+    }
+
+    // Generate HTML Transcript
+    let htmlContent = '';
+    try {
+      htmlContent = generateDiscordHtmlTranscript({
+        ticket: targetTicket,
+        messages: targetTicket?.messages || [],
+        guild,
+        closedBy: user.tag
+      });
+      if (targetTicket) {
+        targetTicket.transcriptHtml = htmlContent;
+        dbTickets.updateTicket(targetTicket);
+      }
+    } catch (transcriptErr) {
+      console.error('[Ticket Transcript] Error generating HTML transcript:', transcriptErr);
     }
 
     // Build Transcript Text File with attachment URLs and clean formatting
@@ -582,8 +883,10 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
 
     const buffer = Buffer.from(transcriptText, 'utf-8');
     const attachment = new AttachmentBuilder(buffer, { name: `transcript-${channel.name}.txt` });
+    const htmlBuffer = Buffer.from(htmlContent || 'Transcript generation error', 'utf-8');
+    const htmlAttachment = new AttachmentBuilder(htmlBuffer, { name: `transcript-${channel.name}.html` });
 
-    // Send transcript log embed + file to closeLogChannel
+    // Send transcript log embed + files to closeLogChannel
     const panel = (targetTicket?.panelId && dbPanels.get(targetTicket.panelId)) || dbPanels.get('default-purchase-panel');
     const targetCloseLogName = normalizeName((panel?.closeLogChannel || 'ticket-logs').replace('#', ''));
     let logChannel = guild.channels.cache.find(c => 
@@ -616,14 +919,15 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
           { name: '📁 Category', value: targetTicket?.topic || panel?.category || 'Purchase', inline: true },
           { name: '📋 Panel Option', value: panel?.name || panel?.id || 'Purchase Ticket', inline: true },
           { name: '💬 Total Messages', value: `${messageList.length}`, inline: true },
-          { name: '📅 Date & Time', value: new Date().toLocaleString(), inline: true }
+          { name: '📅 Date & Time', value: new Date().toLocaleString(), inline: true },
+          { name: '🌐 Web Transcript', value: `[View Full Interactive Transcript Online](${webTranscriptUrl})`, inline: false }
         )
         .setFooter({ text: 'ADAM CORPORATION • Ticket Logs' })
         .setTimestamp();
 
       await logChannel.send({
         embeds: [logEmbed],
-        files: [attachment]
+        files: [htmlAttachment, attachment]
       }).catch(e => console.error('Error sending log transcript to channel:', e));
     }
 

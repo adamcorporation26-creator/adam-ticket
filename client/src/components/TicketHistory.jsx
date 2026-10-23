@@ -69,7 +69,28 @@ export default function TicketHistory({ tickets = [], onCloseTicket }) {
               filteredTickets.map(t => (
                 <tr key={t.id} className="hover:bg-zinc-800/30 transition-all">
                   <td className="py-3.5 px-4 font-mono text-zinc-400 text-[11px]">{t.id}</td>
-                  <td className="py-3.5 px-4 font-semibold text-zinc-100">{t.ticketName}</td>
+                  <td className="py-3.5 px-4">
+                    <div className="font-semibold text-zinc-100">{t.ticketName}</div>
+                    {t.intakeData && (
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        {t.intakeData.product && (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] font-medium">
+                            🛍️ {t.intakeData.product}
+                          </span>
+                        )}
+                        {t.intakeData.issueSubject && (
+                          <span className="px-2 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-300 text-[10px] font-medium">
+                            📌 {t.intakeData.issueSubject}
+                          </span>
+                        )}
+                        {t.intakeData.paymentMethod && (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-medium">
+                            💳 {t.intakeData.paymentMethod}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-3.5 px-4">{t.authorTag || 'User'}</td>
                   <td className="py-3.5 px-4">
                     {t.status === 'resolved' || t.status === 'closed' ? (
@@ -106,18 +127,28 @@ export default function TicketHistory({ tickets = [], onCloseTicket }) {
                     {new Date(t.openTime).toLocaleString()}
                   </td>
                   <td className="py-3.5 px-4">
-                    <button
-                      onClick={() => setSelectedTicket(t)}
-                      className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-yellow-400 rounded-md text-[11px] font-bold border border-zinc-700 transition-all"
-                    >
-                      View Transcript
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setSelectedTicket(t)}
+                        className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-yellow-400 rounded-md text-[11px] font-bold border border-zinc-700 transition-all"
+                      >
+                        Quick View
+                      </button>
+                      <a
+                        href={`/transcripts/${t.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1 bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 rounded-md text-[11px] font-bold border border-indigo-700/50 transition-all inline-flex items-center gap-1"
+                      >
+                        🌐 HTML
+                      </a>
+                    </div>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="6" className="py-8 text-center text-zinc-500">
+                <td colSpan="7" className="py-8 text-center text-zinc-500">
                   No tickets found matching your query.
                 </td>
               </tr>
@@ -140,6 +171,39 @@ export default function TicketHistory({ tickets = [], onCloseTicket }) {
               </button>
             </div>
 
+            {/* Intake details box inside modal */}
+            {selectedTicket.intakeData && (
+              <div className="bg-amber-500/10 border-b border-amber-500/20 p-3.5 text-xs text-zinc-200 space-y-1">
+                <div className="font-bold text-amber-400 text-[11px] uppercase tracking-wider flex items-center gap-1">
+                  📋 Customer Intake Responses
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                  {selectedTicket.intakeData.product && (
+                    <div><span className="text-zinc-400 font-medium">Product:</span> <span className="font-semibold text-zinc-100">{selectedTicket.intakeData.product}</span></div>
+                  )}
+                  {selectedTicket.intakeData.paymentMethod && (
+                    <div><span className="text-zinc-400 font-medium">Payment:</span> <span className="font-semibold text-zinc-100">{selectedTicket.intakeData.paymentMethod}</span></div>
+                  )}
+                  {selectedTicket.intakeData.issueSubject && (
+                    <div><span className="text-zinc-400 font-medium">Subject:</span> <span className="font-semibold text-zinc-100">{selectedTicket.intakeData.issueSubject}</span></div>
+                  )}
+                  {selectedTicket.intakeData.reference && (
+                    <div><span className="text-zinc-400 font-medium">Reference:</span> <span className="font-semibold text-zinc-100">{selectedTicket.intakeData.reference}</span></div>
+                  )}
+                </div>
+                {selectedTicket.intakeData.issueDetails && (
+                  <div className="text-[11px] pt-1 text-zinc-300">
+                    <span className="text-zinc-400 font-medium">Details:</span> {selectedTicket.intakeData.issueDetails}
+                  </div>
+                )}
+                {selectedTicket.intakeData.notes && (
+                  <div className="text-[11px] pt-0.5 text-zinc-300">
+                    <span className="text-zinc-400 font-medium">Notes:</span> {selectedTicket.intakeData.notes}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="p-4 flex-1 overflow-y-auto space-y-3 font-mono text-xs bg-[#121215]">
               {(selectedTicket.messages || []).map((msg, i) => (
                 <div key={i} className="p-2.5 rounded-lg bg-[#1a1a1e] border border-zinc-800/60 space-y-1">
@@ -147,29 +211,39 @@ export default function TicketHistory({ tickets = [], onCloseTicket }) {
                     <span className="font-bold text-yellow-400">{msg.author}</span>
                     <span>{new Date(msg.timestamp).toLocaleTimeString()}</span>
                   </div>
-                  <div className="text-zinc-200 text-xs">{msg.content}</div>
+                  <div className="text-zinc-200 text-xs font-sans">{msg.content}</div>
                 </div>
               ))}
             </div>
 
-            <div className="p-4 border-t border-zinc-800 flex justify-end gap-2 bg-[#18181c]">
-              {selectedTicket.status !== 'resolved' && (
-                <button
-                  onClick={() => {
-                    onCloseTicket(selectedTicket.id);
-                    setSelectedTicket(null);
-                  }}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl"
-                >
-                  Close Ticket
-                </button>
-              )}
-              <button
-                onClick={() => setSelectedTicket(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs rounded-xl"
+            <div className="p-4 border-t border-zinc-800 flex items-center justify-between bg-[#18181c]">
+              <a
+                href={`/transcripts/${selectedTicket.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-md"
               >
-                Close View
-              </button>
+                🌐 Open Interactive HTML Transcript
+              </a>
+              <div className="flex items-center gap-2">
+                {selectedTicket.status !== 'resolved' && (
+                  <button
+                    onClick={() => {
+                      onCloseTicket(selectedTicket.id);
+                      setSelectedTicket(null);
+                    }}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl transition-all"
+                  >
+                    Close Ticket
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedTicket(null)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs rounded-xl transition-all"
+                >
+                  Close View
+                </button>
+              </div>
             </div>
           </div>
         </div>

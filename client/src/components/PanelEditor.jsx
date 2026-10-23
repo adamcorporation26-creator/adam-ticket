@@ -472,6 +472,8 @@ export default function PanelEditor({
                 embedTitle="Embed 1 • Purchase"
                 embedData={panel1.embed || {}} 
                 buttons={panel1.buttons || []} 
+                selectionMode={panel1.selectionMode || 'buttons'}
+                selectPlaceholder={panel1.selectPlaceholder}
                 selectedButtonId={selectedButtonId}
                 onSelectButton={(id) => { setSelectedButtonId(id); setActiveTab('panel1'); }}
                 onAddButton={handleAddButton}
@@ -537,6 +539,8 @@ export default function PanelEditor({
                 embedTitle="Embed 2 • Support"
                 embedData={panel2.embed || {}} 
                 buttons={panel2.buttons || []} 
+                selectionMode={panel2.selectionMode || 'buttons'}
+                selectPlaceholder={panel2.selectPlaceholder}
                 selectedButtonId={selectedButtonId}
                 onSelectButton={(id) => { setSelectedButtonId(id); setActiveTab('panel2'); }}
                 onAddButton={handleAddButton}
@@ -598,6 +602,8 @@ export default function PanelEditor({
               embedTitle={activeTab === 'panel2' ? 'Embed 2 • Support' : 'Embed 1 • Purchase'}
               embedData={activePanel.embed || {}} 
               buttons={activePanel.buttons || []} 
+              selectionMode={activePanel.selectionMode || 'buttons'}
+              selectPlaceholder={activePanel.selectPlaceholder}
               selectedButtonId={selectedButtonId}
               onSelectButton={(id) => setSelectedButtonId(id)}
               onAddButton={handleAddButton}

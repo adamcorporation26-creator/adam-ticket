@@ -5,6 +5,7 @@ import {
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle,
+  StringSelectMenuBuilder,
   REST,
   Routes,
   SlashCommandBuilder,
@@ -16,6 +17,8 @@ import dotenv from 'dotenv';
 import { dbPanels } from '../db/database.js';
 import { 
   handleTicketButtonInteraction, 
+  handleTicketSelectMenuInteraction,
+  handleTicketModalSubmit,
   handleTicketControlButtons, 
   handleTicketRatingInteraction, 
   handleTicketSlashCommand,
@@ -134,9 +137,15 @@ export async function initBot(broadcastWs) {
         } else if (interaction.customId.startsWith('ticket_rate_')) {
           await handleTicketRatingInteraction(interaction, wsBroadcastFn);
         }
+      } else if (interaction.isStringSelectMenu()) {
+        if (interaction.customId.startsWith('ticket_select_menu_')) {
+          await handleTicketSelectMenuInteraction(interaction, wsBroadcastFn);
+        }
       } else if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('ticket_feedback_modal_')) {
           await handleTicketRatingInteraction(interaction, wsBroadcastFn);
+        } else if (interaction.customId.startsWith('ticket_intake_modal_')) {
+          await handleTicketModalSubmit(interaction, wsBroadcastFn);
         }
       }
     } catch (err) {
@@ -154,6 +163,43 @@ export async function initBot(broadcastWs) {
       } catch (replyErr) {
         // Suppress secondary reply failure
       }
+    }
+  });
+
+  // Real-time message streaming into database and WebSocket for stability and live sync
+  client.on(Events.MessageCreate, async (message) => {
+    try {
+      if (!message.guild || (message.author.bot && message.author.id !== client.user.id)) return;
+      
+      const { dbTickets } = await import('../db/database.js');
+      const tickets = dbTickets.get('tickets', []);
+      const ticket = tickets.find(t => t.channelId === message.channel.id && (t.status === 'open' || t.status === 'in_progress'));
+      if (!ticket) return;
+
+      const attachments = message.attachments ? Array.from(message.attachments.values()).map(a => ({ name: a.name, url: a.url })) : [];
+      const msgItem = {
+        id: message.id,
+        author: message.author.tag,
+        authorAvatar: message.author.displayAvatarURL(),
+        content: message.cleanContent || message.content || '',
+        attachments,
+        timestamp: new Date(message.createdTimestamp).toISOString()
+      };
+
+      if (!Array.isArray(ticket.messages)) {
+        ticket.messages = [];
+      }
+
+      if (!ticket.messages.some(m => m.id === message.id)) {
+        ticket.messages.push(msgItem);
+        dbTickets.updateTicket(ticket);
+
+        if (wsBroadcastFn) {
+          wsBroadcastFn('ticket_message', { ticketId: ticket.id, message: msgItem });
+        }
+      }
+    } catch (err) {
+      console.warn('[Discord Bot] Error in real-time message sync:', err.message);
     }
   });
 
@@ -291,32 +337,83 @@ export async function deployPanelEmbed(panelData, channelId) {
     embed.setFooter(footerOptions);
   }
 
-  const buttons = panelData.buttons || [];
-  const actionRow = new ActionRowBuilder();
+  const components = [];
+  const selectionMode = panelData.selectionMode || 'buttons'; // 'buttons' | 'dropdown' | 'both'
 
-  if (buttons.length > 0) {
-    buttons.forEach(b => {
-      let style = ButtonStyle.Primary;
-      if (b.style === 'Secondary') style = ButtonStyle.Secondary;
-      if (b.style === 'Success') style = ButtonStyle.Success;
-      if (b.style === 'Danger') style = ButtonStyle.Danger;
+  // 1. Dropdown Select Menu component if enabled or configured
+  if (selectionMode === 'dropdown' || selectionMode === 'both' || panelData.useSelectMenu || (panelData.selectOptions && panelData.selectOptions.length > 0)) {
+    const selectOptions = (panelData.selectOptions && panelData.selectOptions.length > 0)
+      ? panelData.selectOptions.map(opt => ({
+          label: opt.label || 'Select Category',
+          value: opt.value || opt.id || 'buy',
+          description: opt.description || undefined,
+          emoji: opt.emoji || undefined
+        }))
+      : [
+          {
+            label: 'Buy / Purchase',
+            value: 'buy',
+            description: 'Order products, packages, or services',
+            emoji: '🛒'
+          },
+          {
+            label: 'Technical Support',
+            value: 'support',
+            description: 'Assistance with existing orders or account',
+            emoji: '🛠️'
+          },
+          {
+            label: 'Billing & Invoices',
+            value: 'billing',
+            description: 'Invoices, refunds, and payment queries',
+            emoji: '💼'
+          },
+          {
+            label: 'General Inquiries',
+            value: 'general',
+            description: 'Partnerships, questions, or general help',
+            emoji: '❓'
+          }
+        ];
 
-      const btn = new ButtonBuilder()
-        .setCustomId(b.customId || `ticket_create_${b.id || 'default'}`)
-        .setLabel(b.label || 'Open Ticket')
-        .setStyle(style);
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`ticket_select_menu_${panelData.id || 'default'}`)
+      .setPlaceholder(panelData.selectPlaceholder || '📂 Select a category to open a ticket...')
+      .addOptions(selectOptions.slice(0, 25)); // Discord max 25 options
 
-      if (b.emoji) btn.setEmoji(b.emoji);
-      actionRow.addComponents(btn);
-    });
-  } else {
-    actionRow.addComponents(
-      new ButtonBuilder()
-        .setCustomId('ticket_create_buy')
-        .setLabel('Buy')
-        .setEmoji('🛒')
-        .setStyle(ButtonStyle.Primary)
-    );
+    components.push(new ActionRowBuilder().addComponents(selectMenu));
+  }
+
+  // 2. Button Action Row if selectionMode is 'buttons' or 'both'
+  if (selectionMode !== 'dropdown') {
+    const buttons = panelData.buttons || [];
+    const actionRow = new ActionRowBuilder();
+
+    if (buttons.length > 0) {
+      buttons.forEach(b => {
+        let style = ButtonStyle.Primary;
+        if (b.style === 'Secondary') style = ButtonStyle.Secondary;
+        if (b.style === 'Success') style = ButtonStyle.Success;
+        if (b.style === 'Danger') style = ButtonStyle.Danger;
+
+        const btn = new ButtonBuilder()
+          .setCustomId(b.customId || `ticket_create_${b.id || 'default'}`)
+          .setLabel(b.label || 'Open Ticket')
+          .setStyle(style);
+
+        if (b.emoji) btn.setEmoji(b.emoji);
+        actionRow.addComponents(btn);
+      });
+    } else {
+      actionRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId('ticket_create_buy')
+          .setLabel('Buy')
+          .setEmoji('🛒')
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+    components.push(actionRow);
   }
 
   // Check if we can edit an existing message sent by this bot in this channel!
@@ -331,13 +428,15 @@ export async function deployPanelEmbed(panelData, channelId) {
     }
   }
 
-  // 2. If no stored message found, search recent 50 channel messages for an existing bot message with ticket buttons
+  // 2. If no stored message found, search recent 50 channel messages for an existing bot message with ticket buttons or select menu
   if (!existingMessage) {
     try {
       const recentMessages = await channel.messages.fetch({ limit: 50 });
       existingMessage = recentMessages.find(msg => 
         msg.author.id === clientInstance.user.id && 
-        msg.components?.some(row => row.components?.some(b => b.customId?.startsWith('ticket_create_')))
+        msg.components?.some(row => row.components?.some(c => 
+          c.customId?.startsWith('ticket_create_') || c.customId?.startsWith('ticket_select_menu_')
+        ))
       );
     } catch (e) {
       console.log('[Discord Bot] Recent messages search error:', e.message);
@@ -348,17 +447,15 @@ export async function deployPanelEmbed(panelData, channelId) {
   let isEdit = false;
 
   if (existingMessage) {
-    // Edit the existing panel message in Discord!
     resultMessage = await existingMessage.edit({
       embeds: [embed],
-      components: [actionRow]
+      components
     });
     isEdit = true;
   } else {
-    // Post new message if no existing panel message was found in channel
     resultMessage = await channel.send({
       embeds: [embed],
-      components: [actionRow]
+      components
     });
   }
 

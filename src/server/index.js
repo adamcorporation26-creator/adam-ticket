@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { dbPanels, dbTickets, dbSettings, dbAuditLogs } from '../db/database.js';
 import { getBotClient, deployPanelEmbed } from '../bot/index.js';
+import { generateDiscordHtmlTranscript } from '../bot/transcriptGenerator.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -312,6 +313,63 @@ export function createServer(port = 3001) {
     res.json({ success: true, ticket: updatedTicket });
   });
 
+  // Direct Interactive Web Transcript Route
+  app.get('/transcripts/:id', async (req, res) => {
+    const { id } = req.params;
+    const tickets = dbTickets.get('tickets', []);
+    const ticket = tickets.find(t => t.id === id || t.channelId === id || t.ticketName === id);
+
+    if (!ticket) {
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>Transcript Not Found</title><meta charset="utf-8"></head>
+          <body style="font-family:sans-serif;background:#1e1f22;color:#fff;text-align:center;padding:60px;">
+            <h1 style="color:#f23f43;">❌ Transcript Not Found</h1>
+            <p style="color:#949ba4;margin-top:10px;">The requested ticket transcript was not found or has expired.</p>
+          </body>
+        </html>
+      `);
+    }
+
+    if (ticket.transcriptHtml) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(ticket.transcriptHtml);
+    }
+
+    try {
+      const client = getBotClient();
+      const guild = resolveGuild(client, ticket.guildId);
+      const html = generateDiscordHtmlTranscript({
+        ticket,
+        messages: ticket.messages || [],
+        guild,
+        closedBy: ticket.closedBy || 'Staff'
+      });
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (err) {
+      return res.status(500).send(`Error generating transcript: ${err.message}`);
+    }
+  });
+
+  // Transcript JSON metadata
+  app.get('/api/tickets/:id/transcript', (req, res) => {
+    const { id } = req.params;
+    const tickets = dbTickets.get('tickets', []);
+    const ticket = tickets.find(t => t.id === id || t.channelId === id);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    res.json({
+      ticketId: ticket.id,
+      ticketName: ticket.ticketName,
+      messages: ticket.messages || [],
+      intakeData: ticket.intakeData || null,
+      rating: ticket.rating || null,
+      feedback: ticket.feedback || null,
+      hasHtml: Boolean(ticket.transcriptHtml)
+    });
+  });
+
   // Server & Discord Settings
   app.get('/api/settings', (req, res) => {
     const baseSettings = dbSettings.all();
@@ -513,7 +571,7 @@ export function createServer(port = 3001) {
     app.use(express.static(distPath));
   }
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/ws') || req.path === '/health') return next();
+    if (req.path.startsWith('/api') || req.path.startsWith('/ws') || req.path === '/health' || req.path.startsWith('/transcripts')) return next();
     if (fs.existsSync(indexHtmlPath)) {
       return res.sendFile(indexHtmlPath);
     }
