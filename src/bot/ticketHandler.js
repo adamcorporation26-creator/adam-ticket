@@ -13,6 +13,11 @@ import {
 } from 'discord.js';
 import { dbPanels, dbTickets, dbSettings, dbAuditLogs } from '../db/database.js';
 
+export function normalizeName(str) {
+  if (!str) return '';
+  return str.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
 export async function handleTicketButtonInteraction(interaction, broadcastWs) {
   if (!interaction.isButton()) return;
 
@@ -66,9 +71,10 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
 
     // Check blocked roles
     if (panel.blockedRoles && panel.blockedRoles.length > 0) {
-      const hasBlockedRole = member.roles.cache.some(r => 
-        panel.blockedRoles.includes(r.name) || panel.blockedRoles.includes(r.id)
-      );
+      const hasBlockedRole = member.roles.cache.some(r => {
+        const rNorm = normalizeName(r.name);
+        return panel.blockedRoles.some(b => normalizeName(b) === rNorm || b === r.id);
+      });
       if (hasBlockedRole) {
         return safeReply({ content: '🚫 You are blocked from creating tickets.' });
       }
@@ -130,12 +136,30 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       await ticketChannel.members.add(user.id);
     } else {
       // Text channel creation directly inside configured category
+      const targetCategoryNorm = normalizeName(panel.category || 'tickets');
       let categoryChannel = guild.channels.cache.find(c => 
         c.type === ChannelType.GuildCategory && (
           c.id === panel.category || 
-          c.name.toLowerCase() === (panel.category || 'tickets').toLowerCase()
+          normalizeName(c.name) === targetCategoryNorm ||
+          normalizeName(c.name).includes(targetCategoryNorm)
         )
       );
+
+      // Try fetching channels if not in cache
+      if (!categoryChannel && panel.category) {
+        try {
+          const fetchedChannels = await guild.channels.fetch().catch(() => null);
+          if (fetchedChannels) {
+            categoryChannel = fetchedChannels.find(c => 
+              c.type === ChannelType.GuildCategory && (
+                c.id === panel.category || 
+                normalizeName(c.name) === targetCategoryNorm ||
+                normalizeName(c.name).includes(targetCategoryNorm)
+              )
+            );
+          }
+        } catch (e) {}
+      }
 
       // Create category if not exists
       if (!categoryChannel && panel.category) {
@@ -177,7 +201,8 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       // Add support roles permission
       if (panel.supportRoles && panel.supportRoles.length > 0) {
         guild.roles.cache.forEach(role => {
-          if (panel.supportRoles.includes(role.name) || panel.supportRoles.includes(role.id)) {
+          const roleNorm = normalizeName(role.name);
+          if (panel.supportRoles.some(r => normalizeName(r) === roleNorm || r === role.id)) {
             permissionOverwrites.push({
               id: role.id,
               allow: [
@@ -205,7 +230,8 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
 
     if (guild.roles?.cache) {
       guild.roles.cache.forEach(role => {
-        if (supportRolesList.some(r => r.toLowerCase() === role.name.toLowerCase() || r === role.id)) {
+        const roleNorm = normalizeName(role.name);
+        if (supportRolesList.some(r => normalizeName(r) === roleNorm || r === role.id)) {
           pingMentions.push(`<@&${role.id}>`);
         }
       });
@@ -312,13 +338,23 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
     }
 
     // Log to log channel (for both Embed 1 & Embed 2)
-    const targetLogName = (panel.openLogChannel || 'ticket-logs').replace('#', '').toLowerCase();
+    const targetLogName = normalizeName((panel.openLogChannel || 'ticket-logs').replace('#', ''));
     let logChannel = guild.channels.cache.find(c => 
-      c.isTextBased() && (c.id === panel.openLogChannel || c.name.toLowerCase() === targetLogName)
+      c.isTextBased() && (c.id === panel.openLogChannel || normalizeName(c.name) === targetLogName)
     );
     if (!logChannel) {
+      try {
+        const fetched = await guild.channels.fetch().catch(() => null);
+        if (fetched) {
+          logChannel = fetched.find(c => 
+            c.isTextBased() && (c.id === panel.openLogChannel || normalizeName(c.name) === targetLogName)
+          );
+        }
+      } catch (e) {}
+    }
+    if (!logChannel) {
       logChannel = guild.channels.cache.find(c => 
-        c.isTextBased() && (c.name.toLowerCase().includes('ticket-log') || c.name.toLowerCase().includes('log'))
+        c.isTextBased() && (normalizeName(c.name).includes('ticket-log') || normalizeName(c.name).includes('log'))
       );
     }
 
@@ -470,13 +506,23 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
 
     // Send transcript log embed + file to closeLogChannel (for both Embed 1 & Embed 2)
     const panel = (targetTicket?.panelId && dbPanels.get(targetTicket.panelId)) || dbPanels.get('default-purchase-panel');
-    const targetCloseLogName = (panel?.closeLogChannel || 'ticket-logs').replace('#', '').toLowerCase();
+    const targetCloseLogName = normalizeName((panel?.closeLogChannel || 'ticket-logs').replace('#', ''));
     let logChannel = guild.channels.cache.find(c => 
-      c.isTextBased() && (c.id === panel?.closeLogChannel || c.name.toLowerCase() === targetCloseLogName)
+      c.isTextBased() && (c.id === panel?.closeLogChannel || normalizeName(c.name) === targetCloseLogName)
     );
     if (!logChannel) {
+      try {
+        const fetched = await guild.channels.fetch().catch(() => null);
+        if (fetched) {
+          logChannel = fetched.find(c => 
+            c.isTextBased() && (c.id === panel?.closeLogChannel || normalizeName(c.name) === targetCloseLogName)
+          );
+        }
+      } catch (e) {}
+    }
+    if (!logChannel) {
       logChannel = guild.channels.cache.find(c => 
-        c.isTextBased() && (c.name.toLowerCase().includes('ticket-log') || c.name.toLowerCase().includes('log'))
+        c.isTextBased() && (normalizeName(c.name).includes('ticket-log') || normalizeName(c.name).includes('log'))
       );
     }
 
@@ -529,11 +575,13 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
     // Move channel into Category upon claim
     const panel = (targetTicket?.panelId && dbPanels.get(targetTicket.panelId)) || dbPanels.get('default-purchase-panel');
     const categoryName = panel?.category || targetTicket?.topic || 'Purchase';
+    const catNameNorm = normalizeName(categoryName);
 
     let categoryChannel = guild.channels.cache.find(c => 
       c.type === ChannelType.GuildCategory && (
         c.id === categoryName || 
-        c.name.toLowerCase() === categoryName.toLowerCase()
+        normalizeName(c.name) === catNameNorm ||
+        normalizeName(c.name).includes(catNameNorm)
       )
     );
 
@@ -571,7 +619,7 @@ export async function handleTicketRatingInteraction(interaction, broadcastWs) {
         return await interaction.editReply(payload);
       } else {
         const replyPayload = typeof payload === 'string' ? { content: payload } : { ...payload };
-        if (ephemeral) replyPayload.flags = MessageFlags.Ephemeral;
+        if (ephemeral && interaction.guild) replyPayload.flags = MessageFlags.Ephemeral;
         return await interaction.reply(replyPayload);
       }
     } catch (e) {
@@ -667,13 +715,27 @@ export async function handleTicketRatingInteraction(interaction, broadcastWs) {
 
 async function sendFeedbackLogToGuild(interaction, ticket, stars, feedbackText) {
   const client = interaction.client;
-  const guild = client.guilds.cache.first();
+  const targetGuildId = ticket?.guildId || process.env.GUILD_ID || '1521227404335513610';
+  const guild = (targetGuildId && client.guilds.cache.get(targetGuildId)) 
+    || client.guilds.cache.find(g => normalizeName(g.name).includes('adam'))
+    || client.guilds.cache.first();
   if (!guild) return;
 
   const panel = (ticket?.panelId && dbPanels.get(ticket.panelId)) || dbPanels.get('default-purchase-panel');
-  const logChannel = guild.channels.cache.find(c => 
-    c.name === (panel?.closeLogChannel || 'ticket-logs').replace('#', '') || c.id === panel?.closeLogChannel
+  const targetCloseLogName = normalizeName((panel?.closeLogChannel || 'ticket-logs').replace('#', ''));
+  let logChannel = guild.channels.cache.find(c => 
+    c.isTextBased() && (c.id === panel?.closeLogChannel || normalizeName(c.name) === targetCloseLogName)
   );
+  if (!logChannel) {
+    try {
+      const fetched = await guild.channels.fetch().catch(() => null);
+      if (fetched) {
+        logChannel = fetched.find(c => 
+          c.isTextBased() && (c.id === panel?.closeLogChannel || normalizeName(c.name) === targetCloseLogName)
+        );
+      }
+    } catch (e) {}
+  }
 
   if (logChannel && logChannel.isTextBased()) {
     const starString = '⭐'.repeat(stars);

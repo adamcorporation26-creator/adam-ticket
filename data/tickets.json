@@ -1777,6 +1777,61 @@
         }
       ],
       "closedBy": "abinayaxsuriya"
+    },
+    {
+      "id": "ticket-158",
+      "ticketNumber": 158,
+      "ticketName": "buy-pandaawm_",
+      "topic": "╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬",
+      "status": "resolved",
+      "channelId": "1563249823669297152",
+      "guildId": "1521227404335513610",
+      "authorId": "1322563623087767677",
+      "authorTag": "pandaawm_",
+      "authorAvatar": "https://cdn.discordapp.com/avatars/1322563623087767677/424850185a907d2d9947dd9451ea1983.webp",
+      "openTime": "2026-10-23T17:56:47.047Z",
+      "resolvedTime": "2026-10-23T17:56:55.523Z",
+      "panelId": "default-purchase-panel",
+      "messages": [
+        {
+          "author": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐈𝐂𝐊𝐄𝐓#2627",
+          "content": "<@&1521227404431855839> <@&1521227404431855841> <@&1532805478365528134>",
+          "timestamp": "2026-10-23T17:56:44.221Z"
+        },
+        {
+          "author": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐈𝐂𝐊𝐄𝐓#2627",
+          "content": "**What would you like to purchase?** Reply here with the product and any notes for staff.",
+          "timestamp": "2026-10-23T17:56:46.485Z"
+        },
+        {
+          "author": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐈𝐂𝐊𝐄𝐓#2627",
+          "content": "🔒 Closing ticket, generating receipt, and sending feedback request...",
+          "timestamp": "2026-10-23T17:56:54.206Z"
+        }
+      ],
+      "closedBy": "pandaawm_"
+    },
+    {
+      "id": "ticket-158",
+      "ticketNumber": 158,
+      "ticketName": "buy-susilxtreme",
+      "topic": "╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬",
+      "status": "open",
+      "channelId": "1563249843005300808",
+      "guildId": "1521227404335513610",
+      "authorId": "842417480521089054",
+      "authorTag": "susilxtreme",
+      "authorAvatar": "https://cdn.discordapp.com/avatars/842417480521089054/51a27238a2b441215fa60bf264e48302.webp",
+      "openTime": "2026-10-23T17:56:48.292Z",
+      "resolvedTime": null,
+      "panelId": "default-purchase-panel",
+      "messages": [
+        {
+          "author": "System",
+          "content": "Ticket created by susilxtreme",
+          "timestamp": "2026-10-23T17:56:48.292Z"
+        }
+      ]
     }
   ]
 }

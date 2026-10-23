@@ -82,19 +82,19 @@ export async function initBot(broadcastWs) {
             }).catch(() => {});
           }
 
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
           const channel = interaction.options.getChannel('target_channel') || interaction.channel;
           const panelData = dbPanels.get('default-purchase-panel') || Object.values(dbPanels.all())[0];
           if (!panelData) {
-            return interaction.reply({
-              content: '❌ Panel configuration not found.',
-              flags: MessageFlags.Ephemeral
+            return interaction.editReply({
+              content: '❌ Panel configuration not found.'
             }).catch(() => {});
           }
 
           await deployPanelEmbed(panelData, channel.id);
-          await interaction.reply({
-            content: `✅ Panel deployed to <#${channel.id}>!`,
-            flags: MessageFlags.Ephemeral
+          await interaction.editReply({
+            content: `✅ Panel deployed to <#${channel.id}>!`
           }).catch(() => {});
         }
       } else if (interaction.isButton()) {

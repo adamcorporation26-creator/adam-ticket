@@ -33,10 +33,10 @@ export default function App() {
     try {
       const gParam = guildId ? `?guildId=${guildId}` : '';
       const [resStats, resPanels, resTickets, resSettings, resChannels, resRoles, resEmojis, resCategories, resStatus] = await Promise.all([
-        fetch('/api/stats').then(r => r.json()),
+        fetch(`/api/stats${gParam}`).then(r => r.json()),
         fetch('/api/panels').then(r => r.json()),
         fetch('/api/tickets').then(r => r.json()),
-        fetch('/api/settings').then(r => r.json()),
+        fetch(`/api/settings${gParam}`).then(r => r.json()),
         fetch(`/api/discord/channels${gParam}`).then(r => r.json()),
         fetch(`/api/discord/roles${gParam}`).then(r => r.json()),
         fetch(`/api/discord/emojis${gParam}`).then(r => r.json()),

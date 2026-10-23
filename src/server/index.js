@@ -10,6 +10,21 @@ import { getBotClient, deployPanelEmbed } from '../bot/index.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function resolveGuild(client, guildId) {
+  if (!client || !client.isReady()) return null;
+  if (guildId && client.guilds.cache.has(guildId)) {
+    return client.guilds.cache.get(guildId);
+  }
+  const envGuild = process.env.GUILD_ID;
+  if (envGuild && client.guilds.cache.has(envGuild)) {
+    return client.guilds.cache.get(envGuild);
+  }
+  return client.guilds.cache.find(g => 
+    g.id === '1521227404335513610' || 
+    g.name.normalize('NFKD').toLowerCase().includes('adam')
+  ) || client.guilds.cache.first();
+}
+
 export function createServer(port = 3001) {
   const app = express();
   app.use(cors());
@@ -64,10 +79,7 @@ export function createServer(port = 3001) {
     const tickets = dbTickets.get('tickets', []);
     const settings = dbSettings.all();
     const client = getBotClient();
-    const guildId = req.query.guildId;
-    const guild = (guildId && client?.guilds?.cache?.has(guildId))
-      ? client.guilds.cache.get(guildId)
-      : (client?.guilds?.cache?.find(g => g.id === '1521227404335513610' || g.name.toLowerCase().includes('adam')) || client?.guilds?.cache?.first());
+    const guild = resolveGuild(client, req.query.guildId);
 
     if (guild && guild.channels?.cache?.size <= 5) {
       try {
@@ -221,19 +233,17 @@ export function createServer(port = 3001) {
   app.get('/api/settings', (req, res) => {
     const baseSettings = dbSettings.all();
     const client = getBotClient();
+    const guild = resolveGuild(client, req.query.guildId);
 
-    if (client && client.isReady()) {
-      const guild = client.guilds.cache.first();
-      if (guild) {
-        return res.json({
-          ...baseSettings,
-          guildName: guild.name,
-          memberCount: guild.memberCount,
-          iconUrl: guild.iconURL({ extension: 'png', size: 256 }) || '/adam_corp_logo.jpg',
-          channelsCount: guild.channels.cache.filter(c => c.isTextBased()).size,
-          rolesCount: guild.roles.cache.size
-        });
-      }
+    if (guild) {
+      return res.json({
+        ...baseSettings,
+        guildName: guild.name,
+        memberCount: guild.memberCount,
+        iconUrl: guild.iconURL({ extension: 'png', size: 256 }) || '/adam_corp_logo.jpg',
+        channelsCount: guild.channels.cache.filter(c => c.isTextBased()).size,
+        rolesCount: guild.roles.cache.size
+      });
     }
 
     res.json({
@@ -317,7 +327,6 @@ export function createServer(port = 3001) {
 
   app.get('/api/discord/categories', async (req, res) => {
     const client = getBotClient();
-    const guildId = req.query.guildId;
     const fallbackCategories = [
       { id: 'cat-tickets', name: '╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬' },
       { id: 'cat-support', name: '╰--- 𝐒𝐮𝐩𝐩𝐨𝐫𝐭' },
@@ -329,9 +338,7 @@ export function createServer(port = 3001) {
     if (!client || !client.isReady()) {
       return res.json(fallbackCategories);
     }
-    const guild = (guildId && client.guilds.cache.has(guildId)) 
-      ? client.guilds.cache.get(guildId) 
-      : (client.guilds.cache.find(g => g.id === '1521227404335513610' || g.name.toLowerCase().includes('adam')) || client.guilds.cache.first());
+    const guild = resolveGuild(client, req.query.guildId);
 
     if (!guild) return res.json(fallbackCategories);
 
@@ -349,7 +356,6 @@ export function createServer(port = 3001) {
 
   app.get('/api/discord/channels', async (req, res) => {
     const client = getBotClient();
-    const guildId = req.query.guildId;
     const fallbackChannels = [
       { id: '1521227405468106779', name: 'ticket-logs', type: 'text' },
       { id: '1559556554620010558', name: '𝐒𝐮𝐩𝐩𝐨𝐫𝐭-𝐓𝐢𝐜𝐤𝐞𝐭-𝐋𝐨𝐠𝐬', type: 'text' },
@@ -361,9 +367,7 @@ export function createServer(port = 3001) {
     if (!client || !client.isReady()) {
       return res.json(fallbackChannels);
     }
-    const guild = (guildId && client.guilds.cache.has(guildId)) 
-      ? client.guilds.cache.get(guildId) 
-      : (client.guilds.cache.find(g => g.id === '1521227404335513610' || g.name.toLowerCase().includes('adam')) || client.guilds.cache.first());
+    const guild = resolveGuild(client, req.query.guildId);
 
     if (!guild) return res.json(fallbackChannels);
 
@@ -381,7 +385,6 @@ export function createServer(port = 3001) {
 
   app.get('/api/discord/roles', (req, res) => {
     const client = getBotClient();
-    const guildId = req.query.guildId;
     if (!client || !client.isReady()) {
       return res.json([
         { id: '1', name: 'Founder' },
@@ -390,9 +393,7 @@ export function createServer(port = 3001) {
         { id: '4', name: 'Support' }
       ]);
     }
-    const guild = (guildId && client.guilds.cache.has(guildId)) 
-      ? client.guilds.cache.get(guildId) 
-      : client.guilds.cache.first();
+    const guild = resolveGuild(client, req.query.guildId);
 
     if (!guild) return res.json([]);
     const roles = guild.roles.cache.map(r => ({ id: r.id, name: r.name, color: r.hexColor }));
@@ -401,13 +402,10 @@ export function createServer(port = 3001) {
 
   app.get('/api/discord/emojis', (req, res) => {
     const client = getBotClient();
-    const guildId = req.query.guildId;
     if (!client || !client.isReady()) {
       return res.json([]);
     }
-    const guild = (guildId && client.guilds.cache.has(guildId)) 
-      ? client.guilds.cache.get(guildId) 
-      : client.guilds.cache.first();
+    const guild = resolveGuild(client, req.query.guildId);
 
     if (!guild) return res.json([]);
     const emojis = guild.emojis.cache.map(e => ({

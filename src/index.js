@@ -1,8 +1,15 @@
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { createServer } from './server/index.js';
 import { initBot } from './bot/index.js';
 
-dotenv.config();
+if (fs.existsSync('.env')) {
+  dotenv.config();
+} else if (fs.existsSync('env')) {
+  dotenv.config({ path: 'env' });
+} else {
+  dotenv.config();
+}
 
 const PORT = process.env.PORT || 3001;
 
