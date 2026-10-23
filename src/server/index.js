@@ -120,9 +120,16 @@ export function createServer(port = 3001) {
   // --- HEALTH CHECK FOR DEPLOYMENT / UPTIME MONITORS ---
   app.get('/health', (req, res) => {
     const client = getBotClient();
+    const rawToken = process.env.DISCORD_TOKEN;
+    const token = rawToken ? rawToken.trim().replace(/^["']|["']$/g, '') : null;
     res.json({
       status: 'ok',
+      hasToken: Boolean(token),
+      tokenLength: token ? token.length : 0,
+      botClientCreated: Boolean(client),
       botReady: client ? client.isReady() : false,
+      botUser: client?.user ? client.user.tag : null,
+      guildsCount: client?.guilds?.cache?.size || 0,
       timestamp: new Date().toISOString()
     });
   });
@@ -148,12 +155,15 @@ export function createServer(port = 3001) {
   // Bot Status
   app.get('/api/bot/status', (req, res) => {
     const client = getBotClient();
+    const rawToken = process.env.DISCORD_TOKEN;
     if (!client || !client.user) {
       return res.json({
         online: false,
         username: null,
         ping: 0,
-        guildsCount: 0
+        guildsCount: 0,
+        hasToken: Boolean(rawToken),
+        status: client ? (client.isReady() ? 'ready' : 'connecting') : (rawToken ? 'initializing' : 'missing_token')
       });
     }
     return res.json({
@@ -161,7 +171,8 @@ export function createServer(port = 3001) {
       username: client.user.tag,
       avatar: client.user.displayAvatarURL(),
       ping: client.ws.ping,
-      guildsCount: client.guilds.cache.size
+      guildsCount: client.guilds.cache.size,
+      status: 'ready'
     });
   });
 

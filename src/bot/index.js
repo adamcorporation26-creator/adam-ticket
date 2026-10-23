@@ -33,23 +33,33 @@ export function getBotClient() {
 
 export async function initBot(broadcastWs) {
   wsBroadcastFn = broadcastWs;
-  const token = process.env.DISCORD_TOKEN;
+  const rawToken = process.env.DISCORD_TOKEN;
+  const token = rawToken ? rawToken.trim().replace(/^["']|["']$/g, '') : null;
+
+  console.log('[Discord Bot] 🔄 Initializing Discord Bot...');
+  console.log(`[Discord Bot] 🔑 DISCORD_TOKEN is present: ${Boolean(token)} (length: ${token ? token.length : 0})`);
 
   if (!token) {
-    console.error('[Discord Bot] ❌ DISCORD_TOKEN is missing in environment variables (.env)! Bot will not start.');
+    console.error('[Discord Bot] ❌ DISCORD_TOKEN is missing or empty in environment variables! Please configure DISCORD_TOKEN in Render Environment.');
     return null;
   }
 
+  // Use standard non-privileged intents so the bot connects immediately without requiring privileged intent whitelisting
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildMembers
+      GatewayIntentBits.GuildMessages
     ]
   });
 
   clientInstance = client;
+
+  // Debug logger to expose Cloudflare 429s, websocket state, or gateway handshake delays
+  client.on('debug', (msg) => {
+    if (msg.includes('Hit a 429') || msg.includes('429') || msg.includes('heartbeat') || msg.includes('token') || msg.includes('Ready') || msg.includes('Session') || msg.includes('Connecting') || msg.includes('Identif') || msg.includes('Shard')) {
+      console.log('[Discord Bot Debug]', msg);
+    }
+  });
 
   // Error listeners to prevent unhandled EventEmitter error crashes
   client.on('error', (err) => {
@@ -60,16 +70,27 @@ export async function initBot(broadcastWs) {
     console.warn('[Discord Bot Client Warning]', warning);
   });
 
+  client.on('shardDisconnect', (event, id) => {
+    console.warn(`[Discord Bot] Shard ${id} disconnected (${event.code}). Gateway will attempt reconnect.`);
+  });
+
+  client.on('shardReconnecting', (id) => {
+    console.log(`[Discord Bot] Shard ${id} reconnecting to Discord Gateway...`);
+  });
+
   // ClientReady replaces deprecated ready event in discord.js v14/v15
   client.once(Events.ClientReady, async () => {
-    console.log(`[Discord Bot] Logged in successfully as ${client.user.tag}`);
-    for (const [id, g] of client.guilds.cache) {
-      try {
-        await g.fetch().catch(() => {});
-        await g.channels.fetch().catch(() => {});
-      } catch (e) {}
+    console.log(`[Discord Bot] ✅ Logged in successfully as ${client.user.tag}`);
+    try {
+      for (const [id, g] of client.guilds.cache) {
+        try {
+          await g.fetch().catch(() => {});
+        } catch (e) {}
+      }
+      await registerSlashCommands(client);
+    } catch (readyErr) {
+      console.error('[Discord Bot] Error during ready cache/command registration:', readyErr.message);
     }
-    await registerSlashCommands(client);
   });
 
   client.on('interactionCreate', async (interaction) => {
@@ -137,10 +158,16 @@ export async function initBot(broadcastWs) {
   });
 
   try {
-    await client.login(token);
+    console.log('[Discord Bot] ⏳ Connecting to Discord Gateway via client.login()...');
+    const loginPromise = client.login(token);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Gateway connection timed out after 25 seconds. Discord Gateway handshake took too long.')), 25000)
+    );
+    await Promise.race([loginPromise, timeoutPromise]);
+    console.log('[Discord Bot] 📡 client.login() connected! Gateway handshake completed.');
     return client;
   } catch (err) {
-    console.error('[Discord Bot] Login failed:', err.message);
+    console.error('[Discord Bot] ❌ Login failed:', err.message);
     return null;
   }
 }
