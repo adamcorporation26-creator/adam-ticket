@@ -1,42 +1,19 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { 
+  isSupabaseConfigured,
+  fetchPanelsFromSupabase,
+  upsertPanelToSupabase,
+  fetchTicketsFromSupabase,
+  upsertAllTicketsToSupabase,
+  fetchSettingsFromSupabase,
+  upsertSettingToSupabase,
+  fetchAuditLogsFromSupabase,
+  upsertAuditLogToSupabase
+} from './supabase.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const DATA_DIR = path.join(__dirname, '../../data');
-
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-class JsonDatabase {
-  constructor(filename, initialData = {}) {
-    this.filepath = path.join(DATA_DIR, filename);
+class SupabaseDatabase {
+  constructor(initialData = {}, collectionType = null) {
     this.data = initialData;
-    this.load();
-  }
-
-  load() {
-    try {
-      if (fs.existsSync(this.filepath)) {
-        const raw = fs.readFileSync(this.filepath, 'utf8');
-        this.data = JSON.parse(raw);
-      } else {
-        this.save();
-      }
-    } catch (err) {
-      console.error(`Error loading database file ${this.filepath}:`, err);
-    }
-  }
-
-  save() {
-    try {
-      fs.writeFileSync(this.filepath, JSON.stringify(this.data, null, 2), 'utf8');
-    } catch (err) {
-      console.error(`Error saving database file ${this.filepath}:`, err);
-    }
+    this.collectionType = collectionType; // 'panels' | 'tickets' | 'settings' | 'audit_logs'
   }
 
   get(key, defaultValue = null) {
@@ -45,36 +22,61 @@ class JsonDatabase {
 
   set(key, value) {
     this.data[key] = value;
-    this.save();
+
+    // Asynchronously persist to Supabase in the background
+    if (isSupabaseConfigured()) {
+      if (this.collectionType === 'panels') {
+        upsertPanelToSupabase(key, value).catch(e => console.error('[Supabase Sync Panel Error]', e));
+      } else if (this.collectionType === 'tickets' && key === 'tickets') {
+        upsertAllTicketsToSupabase(value).catch(e => console.error('[Supabase Sync Tickets Error]', e));
+      } else if (this.collectionType === 'settings') {
+        upsertSettingToSupabase(key, value).catch(e => console.error('[Supabase Sync Setting Error]', e));
+      } else if (this.collectionType === 'audit_logs' && key === 'logs') {
+        if (Array.isArray(value) && value.length > 0) {
+          upsertAuditLogToSupabase(value[0]).catch(e => console.error('[Supabase Sync Log Error]', e));
+        }
+      }
+    }
+
     return value;
   }
 
   all() {
     return this.data;
   }
+
+  // Called during startup to synchronize in-memory cache with Supabase
+  syncData(newData) {
+    if (newData && typeof newData === 'object') {
+      this.data = newData;
+    }
+  }
 }
 
-// Initial default settings and sample panel based on Ticket King / Adam Corporation images
-export const dbPanels = new JsonDatabase('panels.json', {
+// Initial fallback settings and sample panel
+export const dbPanels = new SupabaseDatabase({
   'default-purchase-panel': {
     id: 'default-purchase-panel',
     name: 'Purchase Ticket Panel',
-    channelType: 'text', // 'text' or 'thread'
-    category: 'Purchase',
-    supportRoles: ['Founder', 'Staff', 'Manager'],
+    channelType: 'text',
+    category: '╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬',
+    supportRoles: ['𝐒𝐭𝐚𝐟𝐟', '𝐌𝐚𝐧𝐚𝐠𝐞𝐫', '𝐅𝐨𝐮𝐧𝐝𝐞𝐫'],
     blockedRoles: [],
     customTicketName: 'buy-{USER_NAME}',
     openLogChannel: '#ticket-logs',
     closeLogChannel: '#ticket-logs',
     embed: {
-      authorName: 'ADAM CORPORATION',
+      authorName: '𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐢𝐜𝐤𝐞𝐭𝐬',
       authorUrl: '',
       authorIconUrl: '',
-      title: 'ADAM CORPORATION STORE',
+      title: '',
       titleUrl: '',
-      description: 'Welcome to the **ADAM CORPORATION** Store.\n\nExperience the power of **ADAM CORPORATION**. Secure your access now and dominate the competition.\n\n🛒 **How to Purchase**\n\n• Click Buy below to open a purchase ticket. Our team will guide you through the secure payment process.\n\n• Rules\n• Tickets are for purchases and pre-sale inquiries only.\n• Time-wasters may be banned without warning.\n• Respect our staff and community guidelines.\n\n**ADAM CORPORATION • Safe • Trusted • Premium**',
-      color: '#e11d48', // Red accent
-      thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80',
+      description: '<:140268information:1559615872409272419> Rules\n• Tickets Are For **Purchases** Only.\n• Any Other Requests = **Instant Ban**.\n• Stay **Respectful** Or Risk **Removal**.\n',
+      color: '#ff0037',
+      thumbnailUrl: '',
+      imageUrl: 'https://cdn.discordapp.com/attachments/1469382427985186829/1560177770300973136/image.png',
+      footerIconUrl: '',
+      footerText: ''
     },
     welcomeMessage: {
       content: 'Welcome {USER}. You can continue your purchase in 🛒 {GUILD_NAME} here.\n\nWait for a moment our Staffs will help you!',
@@ -86,59 +88,28 @@ export const dbPanels = new JsonDatabase('panels.json', {
       {
         id: 'buy_btn',
         label: 'Buy',
-        style: 'Primary', // Primary, Secondary, Success, Danger
+        style: 'Danger',
         emoji: '🛒',
         customId: 'ticket_create_buy'
       }
-    ]
-  }
-});
-
-export const dbTickets = new JsonDatabase('tickets.json', {
-  'tickets': [
-    {
-      id: 'ticket-101',
-      ticketNumber: 101,
-      ticketName: 'buy-abinayaxsuriya',
-      topic: 'Buy',
-      status: 'resolved', // 'open', 'in_progress', 'resolved', 'closed'
-      channelId: '12345678901',
-      guildId: '99999999999',
-      authorId: '1540639959470313532',
-      authorTag: 'SURIYA#0001',
-      authorAvatar: 'https://cdn.discordapp.com/embed/avatars/0.png',
-      openTime: new Date(Date.now() - 3600000 * 48).toISOString(),
-      resolvedTime: new Date(Date.now() - 3600000 * 47).toISOString(),
-      panelId: 'default-purchase-panel',
-      messages: [
-        { author: 'System', content: 'Ticket created by SURIYA#0001', timestamp: new Date(Date.now() - 3600000 * 48).toISOString() },
-        { author: 'SURIYA#0001', content: 'Hi, I would like to buy access.', timestamp: new Date(Date.now() - 3600000 * 47.9).toISOString() },
-        { author: 'Staff', content: 'Hello! Process completed. Closing ticket.', timestamp: new Date(Date.now() - 3600000 * 47).toISOString() }
-      ]
-    },
-    {
-      id: 'ticket-102',
-      ticketNumber: 102,
-      ticketName: 'buy-alex',
-      topic: 'Buy',
-      status: 'open',
-      channelId: '12345678902',
-      guildId: '99999999999',
-      authorId: '1540639959470313533',
-      authorTag: 'AlexDev#1234',
-      authorAvatar: 'https://cdn.discordapp.com/embed/avatars/1.png',
-      openTime: new Date(Date.now() - 3600000 * 2).toISOString(),
-      resolvedTime: null,
-      panelId: 'default-purchase-panel',
-      messages: [
-        { author: 'System', content: 'Ticket created by AlexDev#1234', timestamp: new Date(Date.now() - 3600000 * 2).toISOString() },
-        { author: 'AlexDev#1234', content: 'Need assistance with purchase options.', timestamp: new Date(Date.now() - 3600000 * 1.8).toISOString() }
-      ]
+    ],
+    permissions: {
+      addReactions: true,
+      attachFiles: true,
+      embedLinks: false,
+      sendVoiceMessages: true,
+      useExternalEmojis: true,
+      useExternalStickers: true,
+      useAppCommands: false
     }
-  ]
-});
+  }
+}, 'panels');
 
-export const dbSettings = new JsonDatabase('settings.json', {
+export const dbTickets = new SupabaseDatabase({
+  'tickets': []
+}, 'tickets');
+
+export const dbSettings = new SupabaseDatabase({
   guildName: 'ADAM CORPORATION',
   memberCount: 579,
   channelsCount: 118,
@@ -150,11 +121,53 @@ export const dbSettings = new JsonDatabase('settings.json', {
   blockedRoles: [],
   defaultCategory: 'Purchase',
   logChannel: '#ticket-logs'
-});
+}, 'settings');
 
-export const dbAuditLogs = new JsonDatabase('audit_logs.json', {
-  logs: [
-    { id: 1, action: 'PANEL_UPDATE', details: 'Updated Purchase Ticket Panel embed text', user: 'Admin', timestamp: new Date().toISOString() },
-    { id: 2, action: 'TICKET_CREATE', details: 'Ticket buy-alex created by AlexDev#1234', user: 'AlexDev#1234', timestamp: new Date(Date.now() - 3600000 * 2).toISOString() }
-  ]
-});
+export const dbAuditLogs = new SupabaseDatabase({
+  logs: []
+}, 'audit_logs');
+
+// ============================================================================
+// DATABASE INITIALIZATION & SUPABASE SYNC
+// ============================================================================
+export async function initDatabase() {
+  if (!isSupabaseConfigured()) {
+    console.log('[Database] ⚠️ Supabase not configured in .env - running on in-memory storage.');
+    return;
+  }
+
+  console.log('[Database] 🔄 Loading all data from Supabase...');
+  try {
+    // 1. Fetch Panels from Supabase
+    const remotePanels = await fetchPanelsFromSupabase();
+    if (remotePanels && Object.keys(remotePanels).length > 0) {
+      dbPanels.syncData(remotePanels);
+      console.log(`[Database]  ✓ Loaded ${Object.keys(remotePanels).length} panel(s) from Supabase.`);
+    }
+
+    // 2. Fetch Tickets from Supabase
+    const remoteTickets = await fetchTicketsFromSupabase();
+    if (remoteTickets && remoteTickets.length > 0) {
+      dbTickets.syncData({ tickets: remoteTickets });
+      console.log(`[Database]  ✓ Loaded ${remoteTickets.length} ticket(s) from Supabase.`);
+    }
+
+    // 3. Fetch Settings from Supabase
+    const remoteSettings = await fetchSettingsFromSupabase();
+    if (remoteSettings && Object.keys(remoteSettings).length > 0) {
+      dbSettings.syncData(remoteSettings);
+      console.log(`[Database]  ✓ Loaded settings from Supabase.`);
+    }
+
+    // 4. Fetch Audit Logs from Supabase
+    const remoteLogs = await fetchAuditLogsFromSupabase();
+    if (remoteLogs && remoteLogs.length > 0) {
+      dbAuditLogs.syncData({ logs: remoteLogs });
+      console.log(`[Database]  ✓ Loaded ${remoteLogs.length} audit log(s) from Supabase.`);
+    }
+
+    console.log('[Database] 🚀 Supabase fully loaded and ready!');
+  } catch (err) {
+    console.error('[Database] ⚠️ Supabase load warning:', err.message);
+  }
+}

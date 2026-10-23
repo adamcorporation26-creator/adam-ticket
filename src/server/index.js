@@ -43,6 +43,16 @@ export function createServer(port = 3001) {
     });
   };
 
+  // --- HEALTH CHECK FOR DEPLOYMENT / UPTIME MONITORS ---
+  app.get('/health', (req, res) => {
+    const client = getBotClient();
+    res.json({
+      status: 'ok',
+      botReady: client ? client.isReady() : false,
+      timestamp: new Date().toISOString()
+    });
+  });
+
   // --- API ROUTES ---
 
   // Admin Authentication
@@ -430,8 +440,8 @@ export function createServer(port = 3001) {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 
-  server.listen(port, () => {
-    console.log(`[API Server] Running at http://localhost:${port}`);
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`[API Server] Running at http://0.0.0.0:${port} (Port ${port})`);
   });
 
   return { server, broadcast };

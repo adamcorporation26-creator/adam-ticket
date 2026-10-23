@@ -2,6 +2,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { createServer } from './server/index.js';
 import { initBot } from './bot/index.js';
+import { initDatabase } from './db/database.js';
 
 if (fs.existsSync('.env')) {
   dotenv.config();
@@ -24,6 +25,7 @@ process.on('uncaughtException', (err) => {
 
 async function main() {
   console.log('🚀 Starting Ticket King Bot & Web Server...');
+  await initDatabase();
   const { broadcast } = createServer(PORT);
   await initBot(broadcast);
   console.log(`✨ Localhost Web Dashboard ready at http://localhost:${PORT}`);
