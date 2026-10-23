@@ -3,6 +3,7 @@ import {
   fetchPanelsFromSupabase,
   upsertPanelToSupabase,
   fetchTicketsFromSupabase,
+  upsertTicketToSupabase,
   upsertAllTicketsToSupabase,
   fetchSettingsFromSupabase,
   upsertSettingToSupabase,
@@ -39,6 +40,64 @@ class SupabaseDatabase {
     }
 
     return value;
+  }
+
+  // Efficient single-ticket operations to avoid bulk-upserting all tickets on every event
+  addTicket(ticket) {
+    if (!ticket || !ticket.id) return ticket;
+    if (!Array.isArray(this.data.tickets)) {
+      this.data.tickets = [];
+    }
+    const idx = this.data.tickets.findIndex(t => t.id === ticket.id);
+    if (idx !== -1) {
+      this.data.tickets[idx] = ticket;
+    } else {
+      this.data.tickets.push(ticket);
+    }
+
+    if (isSupabaseConfigured()) {
+      upsertTicketToSupabase(ticket).catch(e => console.error(`[Supabase Ticket Add Error ${ticket.id}]`, e));
+    }
+    return ticket;
+  }
+
+  updateTicket(ticket) {
+    if (!ticket || !ticket.id) return ticket;
+    if (!Array.isArray(this.data.tickets)) {
+      this.data.tickets = [];
+    }
+    const idx = this.data.tickets.findIndex(t => t.id === ticket.id || (ticket.channelId && t.channelId === ticket.channelId));
+    if (idx !== -1) {
+      this.data.tickets[idx] = { ...this.data.tickets[idx], ...ticket };
+      ticket = this.data.tickets[idx];
+    } else {
+      this.data.tickets.push(ticket);
+    }
+
+    if (isSupabaseConfigured()) {
+      upsertTicketToSupabase(ticket).catch(e => console.error(`[Supabase Ticket Update Error ${ticket.id}]`, e));
+    }
+    return ticket;
+  }
+
+  // Directly log an audit entry
+  addAuditLog(action, details, user = 'System') {
+    const logItem = {
+      id: Date.now(),
+      action,
+      details,
+      user,
+      timestamp: new Date().toISOString()
+    };
+    if (!Array.isArray(this.data.logs)) {
+      this.data.logs = [];
+    }
+    this.data.logs = [logItem, ...this.data.logs.slice(0, 49)];
+
+    if (isSupabaseConfigured()) {
+      upsertAuditLogToSupabase(logItem).catch(e => console.error('[Supabase Log Add Error]', e));
+    }
+    return logItem;
   }
 
   all() {

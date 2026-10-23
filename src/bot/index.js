@@ -14,7 +14,13 @@ import {
 } from 'discord.js';
 import dotenv from 'dotenv';
 import { dbPanels } from '../db/database.js';
-import { handleTicketButtonInteraction, handleTicketControlButtons, handleTicketRatingInteraction, rearrangeGuildTickets } from './ticketHandler.js';
+import { 
+  handleTicketButtonInteraction, 
+  handleTicketControlButtons, 
+  handleTicketRatingInteraction, 
+  handleTicketSlashCommand,
+  rearrangeGuildTickets 
+} from './ticketHandler.js';
 
 dotenv.config();
 
@@ -25,14 +31,12 @@ export function getBotClient() {
   return clientInstance;
 }
 
-const DEFAULT_TOKEN = Buffer.from('TVRVMU16QTVOVEEzT0RRMk1EQXdNalExTkEuR2gtdVA0LmJKNkdETWpmTEUzWHJYZFlWaWF3OC1qaXpsT18zN1p4eDVHVzBB', 'base64').toString('utf-8');
-
 export async function initBot(broadcastWs) {
   wsBroadcastFn = broadcastWs;
-  const token = process.env.DISCORD_TOKEN || DEFAULT_TOKEN;
+  const token = process.env.DISCORD_TOKEN;
 
   if (!token) {
-    console.warn('[Discord Bot] DISCORD_TOKEN is missing in environment variables! Please configure DISCORD_TOKEN in Render Environment.');
+    console.error('[Discord Bot] ❌ DISCORD_TOKEN is missing in environment variables (.env)! Bot will not start.');
     return null;
   }
 
@@ -72,12 +76,14 @@ export async function initBot(broadcastWs) {
     try {
       if (interaction.isChatInputCommand()) {
         if (interaction.commandName === 'panel') {
-          const ownerId = process.env.OWNER_ID || '842417480521089054';
-          const isOwner = interaction.user.id === ownerId || interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+          const ownerId = process.env.OWNER_ID;
+          const isOwner = (ownerId && interaction.user.id === ownerId) || 
+                          interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ||
+                          interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
 
           if (!isOwner) {
             return interaction.reply({
-              content: `🚫 **Access Denied**: This bot is private and can only be controlled by its owner (<@${ownerId}>).`,
+              content: `🚫 **Access Denied**: You need Administrator or Server Management permissions to deploy panels.`,
               flags: MessageFlags.Ephemeral
             }).catch(() => {});
           }
@@ -96,6 +102,8 @@ export async function initBot(broadcastWs) {
           await interaction.editReply({
             content: `✅ Panel deployed to <#${channel.id}>!`
           }).catch(() => {});
+        } else if (interaction.commandName === 'ticket') {
+          await handleTicketSlashCommand(interaction, wsBroadcastFn);
         }
       } else if (interaction.isButton()) {
         if (interaction.customId.startsWith('ticket_create_')) {
@@ -143,10 +151,37 @@ async function registerSlashCommands(client) {
       new SlashCommandBuilder()
         .setName('panel')
         .setDescription('Deploy ticket creation panel embed')
-        .addChannelOption(opt => opt.setName('target_channel').setDescription('Channel to deploy panel into'))
+        .addChannelOption(opt => opt.setName('target_channel').setDescription('Channel to deploy panel into')),
+      new SlashCommandBuilder()
+        .setName('ticket')
+        .setDescription('Ticket management commands')
+        .addSubcommand(sub => 
+          sub.setName('close')
+            .setDescription('Close current ticket')
+            .addStringOption(opt => opt.setName('reason').setDescription('Reason for closing the ticket'))
+        )
+        .addSubcommand(sub => 
+          sub.setName('claim')
+            .setDescription('Claim current ticket')
+        )
+        .addSubcommand(sub => 
+          sub.setName('add')
+            .setDescription('Add a user to this ticket')
+            .addUserOption(opt => opt.setName('target_user').setDescription('User to add').setRequired(true))
+        )
+        .addSubcommand(sub => 
+          sub.setName('remove')
+            .setDescription('Remove a user from this ticket')
+            .addUserOption(opt => opt.setName('target_user').setDescription('User to remove').setRequired(true))
+        )
+        .addSubcommand(sub => 
+          sub.setName('rename')
+            .setDescription('Rename this ticket channel')
+            .addStringOption(opt => opt.setName('new_name').setDescription('New name for ticket channel').setRequired(true))
+        )
     ].map(cmd => cmd.toJSON());
 
-    const token = process.env.DISCORD_TOKEN || DEFAULT_TOKEN;
+    const token = process.env.DISCORD_TOKEN;
     const rest = new REST({ version: '10' }).setToken(token);
     const clientId = process.env.CLIENT_ID || client.user.id;
 
@@ -155,13 +190,13 @@ async function registerSlashCommands(client) {
         Routes.applicationGuildCommands(clientId, process.env.GUILD_ID),
         { body: commands }
       );
-      console.log('[Discord Bot] Registered guild slash commands');
+      console.log('[Discord Bot] Registered guild slash commands (/panel, /ticket)');
     } else {
       await rest.put(
         Routes.applicationCommands(clientId),
         { body: commands }
       );
-      console.log('[Discord Bot] Registered global slash commands');
+      console.log('[Discord Bot] Registered global slash commands (/panel, /ticket)');
     }
   } catch (err) {
     console.error('[Discord Bot] Error registering slash commands:', err.message);

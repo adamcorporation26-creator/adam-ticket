@@ -8,22 +8,33 @@ export default function LoginPage({ onLoginSuccess }) {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      // Validate credentials: username "adamadmin" and password "adam0626"
-      if (username.trim() === 'adamadmin' && password === 'adam0626') {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
         localStorage.setItem('adam_admin_auth', 'authenticated');
-        localStorage.setItem('adam_admin_user', 'adamadmin');
+        localStorage.setItem('adam_admin_user', data.user || username.trim());
+        if (data.token) {
+          localStorage.setItem('adam_admin_token', data.token);
+        }
         onLoginSuccess();
       } else {
-        setError('❌ Invalid username or password. Please try again.');
-        setIsLoading(false);
+        setError(data.message || '❌ Invalid username or password. Please try again.');
       }
-    }, 400);
+    } catch (err) {
+      setError('❌ Failed to connect to server. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

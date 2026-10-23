@@ -105,12 +105,11 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
         });
       } else {
         // Channel was deleted manually from Discord, so update ticket status in DB to 'closed'
-        const tIdx = tickets.findIndex(t => t.id === existingOpenTicket.id);
-        if (tIdx !== -1) {
-          tickets[tIdx].status = 'closed';
-          tickets[tIdx].resolvedTime = new Date().toISOString();
-          dbTickets.set('tickets', tickets);
-        }
+        dbTickets.updateTicket({
+          id: existingOpenTicket.id,
+          status: 'closed',
+          resolvedTime: new Date().toISOString()
+        });
       }
     }
 
@@ -121,8 +120,9 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       .replace(/{USERNAME}/g, user.username.toLowerCase())
       .replace(/{USER_ID}/g, user.id);
 
-    // Get current ticket count for number assignment
-    const ticketNumber = tickets.length + 101;
+    // Get sequential ticket count for safe number assignment
+    const maxTicketNum = tickets.reduce((max, t) => Math.max(max, Number(t.ticketNumber) || 0), 100);
+    const ticketNumber = maxTicketNum + 1;
 
     let ticketChannel;
 
@@ -329,8 +329,7 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       ]
     };
 
-    tickets.push(newTicket);
-    dbTickets.set('tickets', tickets);
+    dbTickets.addTicket(newTicket);
 
     // Notify dashboard via WebSocket
     if (broadcastWs) {
@@ -406,26 +405,83 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
     }
   };
 
-  if (customId.startsWith('ticket_close_')) {
+  // 1. Initial click on Close Ticket button: verify permission & prompt confirmation
+  if (customId.startsWith('ticket_close_') && !customId.startsWith('ticket_close_confirm_') && !customId.startsWith('ticket_close_cancel_')) {
+    const tickets = dbTickets.get('tickets', []);
+    const targetTicket = tickets.find(t => t.channelId === channel.id);
+    const panel = (targetTicket?.panelId && dbPanels.get(targetTicket.panelId)) || dbPanels.get('default-purchase-panel');
+    const supportRolesList = panel?.supportRoles || ['Founder', 'Staff', 'Manager'];
+
+    const isAuthor = targetTicket && targetTicket.authorId === user.id;
+    const isStaff = interaction.member?.permissions?.has(PermissionFlagsBits.ManageChannels) ||
+                    interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) ||
+                    interaction.member?.roles?.cache?.some(r => supportRolesList.some(sr => normalizeName(sr) === normalizeName(r.name) || sr === r.id));
+
+    if (!isAuthor && !isStaff) {
+      return safeReply({
+        content: '🚫 **Access Denied**: Only the ticket author or support staff can close this ticket.'
+      }, true);
+    }
+
+    const confirmRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`ticket_close_confirm_${channel.id}`)
+        .setLabel('Yes, Close Ticket')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔒'),
+      new ButtonBuilder()
+        .setCustomId(`ticket_close_cancel_${channel.id}`)
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return safeReply({
+      content: '⚠️ **Are you sure you want to close this ticket?**\nA transcript will be generated and saved, and this channel will be closed.',
+      components: [confirmRow]
+    });
+  }
+
+  // 2. Cancellation of ticket close
+  if (customId.startsWith('ticket_close_cancel_')) {
+    try {
+      await interaction.update({
+        content: '✅ Ticket closure cancelled.',
+        components: []
+      });
+    } catch (e) {}
+    return;
+  }
+
+  // 3. Confirmed ticket close
+  if (customId.startsWith('ticket_close_confirm_')) {
     try {
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply().catch(() => {});
+        await interaction.update({
+          content: '🔒 **Closing ticket**... Locking channel, archiving messages, and generating transcript...',
+          components: []
+        }).catch(() => {});
       }
     } catch (e) {}
-    await safeReply({ content: '🔒 Closing ticket, generating receipt, and sending feedback request...' });
 
     const tickets = dbTickets.get('tickets', []);
     const ticketIndex = tickets.findIndex(t => t.channelId === channel.id);
     let targetTicket = ticketIndex !== -1 ? tickets[ticketIndex] : null;
 
     if (targetTicket) {
-      tickets[ticketIndex].status = 'resolved';
-      tickets[ticketIndex].resolvedTime = new Date().toISOString();
-      tickets[ticketIndex].closedBy = user.tag;
-      dbTickets.set('tickets', tickets);
+      targetTicket.status = 'resolved';
+      targetTicket.resolvedTime = new Date().toISOString();
+      targetTicket.closedBy = user.tag;
+      dbTickets.updateTicket(targetTicket);
 
       if (broadcastWs) {
-        broadcastWs('ticket_closed', tickets[ticketIndex]);
+        broadcastWs('ticket_closed', targetTicket);
+      }
+
+      // Lock channel: revoke send message permission from author
+      if (targetTicket.authorId) {
+        await channel.permissionOverwrites.edit(targetTicket.authorId, {
+          SendMessages: false
+        }).catch(() => {});
       }
     }
 
@@ -455,7 +511,7 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
           );
 
           await ticketAuthor.send({ embeds: [receiptEmbed], components: [ratingRow] }).catch(() => {
-            console.log(`Could not send DM receipt to user ${targetTicket.authorId}`);
+            console.log(`Could not send DM receipt to user ${targetTicket.authorId} (user has DMs closed).`);
           });
         }
       } catch (e) {
@@ -463,28 +519,43 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
       }
     }
 
-    // Generate transcript from channel messages
+    // Generate complete transcript using multi-page pagination loop (up to 500 messages)
     let messageList = [];
     try {
-      const fetched = await channel.messages.fetch({ limit: 100 }).catch(() => null);
-      if (fetched) {
-        messageList = Array.from(fetched.values()).reverse();
+      let lastId = null;
+      while (messageList.length < 500) {
+        const fetchOptions = { limit: 100 };
+        if (lastId) fetchOptions.before = lastId;
+        const fetched = await channel.messages.fetch(fetchOptions).catch(() => null);
+        if (!fetched || fetched.size === 0) break;
+        const arr = Array.from(fetched.values());
+        messageList.push(...arr);
+        lastId = arr[arr.length - 1].id;
+        if (fetched.size < 100) break;
       }
+      messageList.reverse();
     } catch (e) {
       console.log('Error fetching channel messages for transcript:', e.message);
     }
 
     // Save messages in DB ticket record for dashboard transcript viewer
     if (targetTicket && messageList.length > 0) {
-      targetTicket.messages = messageList.map(m => ({
-        author: m.author ? m.author.tag : 'System',
-        content: m.content || (m.embeds.length ? '[Embed]' : '[Attachment]'),
-        timestamp: new Date(m.createdTimestamp).toISOString()
-      }));
-      dbTickets.set('tickets', tickets);
+      targetTicket.messages = messageList.map(m => {
+        let content = m.cleanContent || m.content || '';
+        if (m.attachments && m.attachments.size > 0) {
+          const attachNames = m.attachments.map(a => `[Attachment: ${a.name}]`).join(' ');
+          content = content ? `${content} ${attachNames}` : attachNames;
+        }
+        return {
+          author: m.author ? m.author.tag : 'System',
+          content: content || '[Empty / System Message]',
+          timestamp: new Date(m.createdTimestamp).toISOString()
+        };
+      });
+      dbTickets.updateTicket(targetTicket);
     }
 
-    // Build Transcript Text File
+    // Build Transcript Text File with attachment URLs and clean formatting
     let transcriptText = `====================================================\n`;
     transcriptText += `ADAM CORPORATION — TICKET TRANSCRIPT\n`;
     transcriptText += `Ticket Channel: #${channel.name}\n`;
@@ -497,14 +568,22 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
     messageList.forEach(m => {
       const time = new Date(m.createdTimestamp).toLocaleString();
       const author = m.author ? m.author.tag : 'System';
-      const content = m.content || (m.embeds.length ? '[Embed]' : '[Attachment]');
+      let content = m.cleanContent || m.content || '';
+      if (m.attachments && m.attachments.size > 0) {
+        const attachList = m.attachments.map(a => `[Attachment: ${a.name} -> ${a.url}]`).join(' ');
+        content = content ? `${content} ${attachList}` : attachList;
+      }
+      if (m.embeds && m.embeds.length > 0) {
+        const embedSummary = m.embeds.map(e => `[Embed: ${e.title || 'Rich Content'}]`).join(' ');
+        content = content ? `${content} ${embedSummary}` : embedSummary;
+      }
       transcriptText += `[${time}] ${author}: ${content}\n`;
     });
 
     const buffer = Buffer.from(transcriptText, 'utf-8');
     const attachment = new AttachmentBuilder(buffer, { name: `transcript-${channel.name}.txt` });
 
-    // Send transcript log embed + file to closeLogChannel (for both Embed 1 & Embed 2)
+    // Send transcript log embed + file to closeLogChannel
     const panel = (targetTicket?.panelId && dbPanels.get(targetTicket.panelId)) || dbPanels.get('default-purchase-panel');
     const targetCloseLogName = normalizeName((panel?.closeLogChannel || 'ticket-logs').replace('#', ''));
     let logChannel = guild.channels.cache.find(c => 
@@ -548,11 +627,17 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
       }).catch(e => console.error('Error sending log transcript to channel:', e));
     }
 
+    // Notify channel of countdown and delete safely after 10 seconds
+    await channel.send({
+      content: '🔒 **Ticket Closed**: Transcript saved. This channel will be permanently deleted in 10 seconds...'
+    }).catch(() => {});
+
     setTimeout(async () => {
       await channel.delete('Ticket closed by user/staff').catch(() => {});
-    }, 4000);
+    }, 10000);
   }
 
+  // 4. Handle Claim Button
   if (customId.startsWith('ticket_claim_')) {
     const tickets = dbTickets.get('tickets', []);
     const ticketIndex = tickets.findIndex(t => t.channelId === channel.id);
@@ -602,11 +687,11 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
       });
     }
 
-    if (ticketIndex !== -1) {
-      tickets[ticketIndex].status = 'in_progress';
-      tickets[ticketIndex].claimedBy = user.tag;
-      dbTickets.set('tickets', tickets);
-      if (broadcastWs) broadcastWs('ticket_updated', tickets[ticketIndex]);
+    if (targetTicket) {
+      targetTicket.status = 'in_progress';
+      targetTicket.claimedBy = user.tag;
+      dbTickets.updateTicket(targetTicket);
+      if (broadcastWs) broadcastWs('ticket_updated', targetTicket);
     }
   }
 }
@@ -668,8 +753,7 @@ export async function handleTicketRatingInteraction(interaction, broadcastWs) {
         tickets[ticketIndex].rating = stars;
         tickets[ticketIndex].feedback = 'Logged for team (4-5 stars)';
         tickets[ticketIndex].feedbackTime = new Date().toISOString();
-        dbTickets.set('tickets', tickets);
-        updatedTicket = tickets[ticketIndex];
+        updatedTicket = dbTickets.updateTicket(tickets[ticketIndex]);
         if (broadcastWs) broadcastWs('ticket_updated', updatedTicket);
       }
 
@@ -699,8 +783,7 @@ export async function handleTicketRatingInteraction(interaction, broadcastWs) {
       tickets[ticketIndex].rating = stars;
       tickets[ticketIndex].feedback = userMessage;
       tickets[ticketIndex].feedbackTime = new Date().toISOString();
-      dbTickets.set('tickets', tickets);
-      updatedTicket = tickets[ticketIndex];
+      updatedTicket = dbTickets.updateTicket(tickets[ticketIndex]);
       if (broadcastWs) broadcastWs('ticket_updated', updatedTicket);
     }
 
@@ -764,18 +847,128 @@ export async function rearrangeGuildTickets(guild) {
       c.isTextBased() && (c.name.startsWith('buy-') || ticketsInDb.some(t => t.channelId === c.id))
     );
 
-    if (ticketChannels.size === 0) return;
+    if (ticketChannels.size <= 1) return;
 
     // Sort ticket channels descending by creationTimestamp (newest ticket first)
     const sorted = Array.from(ticketChannels.values()).sort((a, b) => {
       return (b.createdTimestamp || 0) - (a.createdTimestamp || 0);
     });
 
-    // Re-position channels sequentially: newest at 0, second newest at 1, etc.
-    for (let i = 0; i < sorted.length; i++) {
-      await sorted[i].setPosition(i).catch(() => {});
-    }
+    // Bulk reposition using guild.channels.setPositions to avoid rate limits
+    const positionsPayload = sorted.map((ch, index) => ({
+      channel: ch.id,
+      position: index
+    }));
+    await guild.channels.setPositions(positionsPayload).catch(() => {});
   } catch (err) {
     console.error('Error rearranging guild tickets:', err.message);
+  }
+}
+
+// Handler for slash command actions (/ticket close, /ticket add, /ticket remove, /ticket rename, /ticket claim)
+export async function handleTicketSlashCommand(interaction, broadcastWs) {
+  const { options, channel, guild, user, member } = interaction;
+  if (!guild) return;
+
+  const subcommand = options.getSubcommand();
+  const tickets = dbTickets.get('tickets', []);
+  const targetTicket = tickets.find(t => t.channelId === channel.id);
+
+  if (subcommand === 'close') {
+    const panel = (targetTicket?.panelId && dbPanels.get(targetTicket.panelId)) || dbPanels.get('default-purchase-panel');
+    const supportRolesList = panel?.supportRoles || ['Founder', 'Staff', 'Manager'];
+    const isAuthor = targetTicket && targetTicket.authorId === user.id;
+    const isStaff = member.permissions.has(PermissionFlagsBits.ManageChannels) ||
+                    member.permissions.has(PermissionFlagsBits.Administrator) ||
+                    member.roles.cache.some(r => supportRolesList.some(sr => normalizeName(sr) === normalizeName(r.name) || sr === r.id));
+
+    if (!isAuthor && !isStaff) {
+      return interaction.reply({
+        content: '🚫 **Access Denied**: Only the ticket author or staff can close this ticket.',
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const reason = options.getString('reason');
+    if (reason && targetTicket) {
+      targetTicket.closeReason = reason;
+      dbTickets.updateTicket(targetTicket);
+    }
+
+    const confirmRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`ticket_close_confirm_${channel.id}`)
+        .setLabel('Yes, Close Ticket')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🔒'),
+      new ButtonBuilder()
+        .setCustomId(`ticket_close_cancel_${channel.id}`)
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return interaction.reply({
+      content: `⚠️ **Are you sure you want to close this ticket?**${reason ? `\n**Reason:** ${reason}` : ''}`,
+      components: [confirmRow]
+    });
+  }
+
+  if (subcommand === 'add') {
+    const targetUser = options.getUser('target_user');
+    if (!targetUser) return interaction.reply({ content: '❌ Target user not specified.', flags: MessageFlags.Ephemeral });
+
+    await channel.permissionOverwrites.edit(targetUser.id, {
+      ViewChannel: true,
+      SendMessages: true,
+      ReadMessageHistory: true,
+      AttachFiles: true
+    }).catch(err => {
+      return interaction.reply({ content: `❌ Failed to add user: ${err.message}`, flags: MessageFlags.Ephemeral });
+    });
+
+    return interaction.reply({ content: `✅ Added <@${targetUser.id}> to this ticket channel.` });
+  }
+
+  if (subcommand === 'remove') {
+    const targetUser = options.getUser('target_user');
+    if (!targetUser) return interaction.reply({ content: '❌ Target user not specified.', flags: MessageFlags.Ephemeral });
+
+    await channel.permissionOverwrites.delete(targetUser.id).catch(err => {
+      return interaction.reply({ content: `❌ Failed to remove user: ${err.message}`, flags: MessageFlags.Ephemeral });
+    });
+
+    return interaction.reply({ content: `✅ Removed <@${targetUser.id}> from this ticket channel.` });
+  }
+
+  if (subcommand === 'rename') {
+    const newName = options.getString('new_name');
+    if (!newName) return interaction.reply({ content: '❌ New name required.', flags: MessageFlags.Ephemeral });
+
+    const safeName = newName.toLowerCase().replace(/[^a-z0-9-_]/g, '-').slice(0, 32);
+    await channel.setName(safeName).catch(err => {
+      return interaction.reply({ content: `❌ Failed to rename channel: ${err.message}`, flags: MessageFlags.Ephemeral });
+    });
+
+    if (targetTicket) {
+      targetTicket.ticketName = safeName;
+      dbTickets.updateTicket(targetTicket);
+    }
+
+    return interaction.reply({ content: `✅ Channel renamed to \`${safeName}\`.` });
+  }
+
+  if (subcommand === 'claim') {
+    if (targetTicket && targetTicket.authorId === user.id) {
+      return interaction.reply({ content: '🚫 You cannot claim your own ticket.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (targetTicket) {
+      targetTicket.status = 'in_progress';
+      targetTicket.claimedBy = user.tag;
+      dbTickets.updateTicket(targetTicket);
+      if (broadcastWs) broadcastWs('ticket_updated', targetTicket);
+    }
+
+    return interaction.reply({ content: `🙋‍♂️ Ticket claimed by <@${user.id}>!` });
   }
 }

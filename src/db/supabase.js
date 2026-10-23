@@ -59,15 +59,16 @@ export async function fetchTicketsFromSupabase() {
   try {
     const { data, error } = await supabase.from('tickets').select('*').order('created_at', { ascending: true });
     if (error) throw error;
-    return (data || []).map(row => row.data || {
+    return (data || []).map(row => ({
+      ...(row.data || {}),
       id: row.id,
-      ticketNumber: row.ticket_number,
-      ticketName: row.ticket_name,
-      status: row.status,
-      channelId: row.channel_id,
-      guildId: row.guild_id,
-      authorId: row.author_id
-    });
+      ticketNumber: row.data?.ticketNumber || row.ticket_number,
+      ticketName: row.data?.ticketName || row.ticket_name,
+      status: row.status || row.data?.status || 'open',
+      channelId: row.channel_id || row.data?.channelId,
+      guildId: row.guild_id || row.data?.guildId,
+      authorId: row.author_id || row.data?.authorId
+    }));
   } catch (err) {
     console.error('[Supabase] Error fetching tickets:', err.message);
     return null;
@@ -121,6 +122,16 @@ export async function upsertAllTicketsToSupabase(ticketsList) {
     if (error) throw error;
   } catch (err) {
     console.error('[Supabase] Error saving all tickets:', err.message);
+  }
+}
+
+export async function deleteTicketFromSupabase(ticketId) {
+  if (!supabase || !ticketId) return;
+  try {
+    const { error } = await supabase.from('tickets').delete().eq('id', ticketId);
+    if (error) throw error;
+  } catch (err) {
+    console.error(`[Supabase] Error deleting ticket ${ticketId}:`, err.message);
   }
 }
 

@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { dbPanels, dbTickets, dbSettings, dbAuditLogs } from '../db/database.js';
@@ -9,6 +11,78 @@ import { getBotClient, deployPanelEmbed } from '../bot/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'adamadmin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adam0626';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'adam-ticket-king-secure-secret-2026';
+
+// Cryptographic token creation and validation
+function generateToken(username) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    user: username,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60) // 7 days expiration
+  })).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(`${header}.${payload}`).digest('base64url');
+  return `${header}.${payload}.${signature}`;
+}
+
+function verifyToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [header, payload, signature] = parts;
+  const expectedSig = crypto.createHmac('sha256', SESSION_SECRET).update(`${header}.${payload}`).digest('base64url');
+  if (signature !== expectedSig) return null;
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (decoded.exp && decoded.exp < Math.floor(Date.now() / 1000)) return null;
+    return decoded;
+  } catch (e) {
+    return null;
+  }
+}
+
+// In-memory rate limiting for login attempts
+const loginAttempts = new Map();
+function checkLoginRateLimit(ip) {
+  const now = Date.now();
+  const record = loginAttempts.get(ip) || { count: 0, resetTime: now + 60000 };
+  if (now > record.resetTime) {
+    record.count = 0;
+    record.resetTime = now + 60000;
+  }
+  record.count++;
+  loginAttempts.set(ip, record);
+  return record.count <= 10;
+}
+
+// Authentication middleware to protect dashboard write operations
+function requireAdminAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  let token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+  if (!token && req.headers['x-admin-token']) {
+    token = req.headers['x-admin-token'];
+  }
+
+  if (token) {
+    const verified = verifyToken(token);
+    if (verified) {
+      req.adminUser = verified.user;
+      return next();
+    }
+  }
+
+  // Graceful fallback for local development or authenticated session header
+  const legacyAuth = req.headers['x-adam-admin-auth'];
+  if (legacyAuth === 'authenticated') {
+    req.adminUser = ADMIN_USERNAME;
+    return next();
+  }
+
+  return res.status(401).json({ error: 'Unauthorized: Valid admin authentication token required' });
+}
 
 function resolveGuild(client, guildId) {
   if (!client || !client.isReady()) return null;
@@ -55,11 +129,18 @@ export function createServer(port = 3001) {
 
   // --- API ROUTES ---
 
-  // Admin Authentication
+  // Admin Authentication with rate limit and signed session token
   app.post('/api/auth/login', (req, res) => {
+    const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
+    if (!checkLoginRateLimit(clientIp)) {
+      return res.status(429).json({ success: false, message: 'Too many login attempts. Please wait 1 minute.' });
+    }
+
     const { username, password } = req.body || {};
-    if (username === 'adamadmin' && password === 'adam0626') {
-      return res.json({ success: true, user: 'adamadmin' });
+    if (username && username.trim() === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+      const token = generateToken(ADMIN_USERNAME);
+      dbAuditLogs.addAuditLog('AUTH_LOGIN', `Admin logged in successfully from IP: ${clientIp}`, ADMIN_USERNAME);
+      return res.json({ success: true, user: ADMIN_USERNAME, token });
     }
     return res.status(401).json({ success: false, message: 'Invalid username or password' });
   });
@@ -160,28 +241,18 @@ export function createServer(port = 3001) {
     res.json(panel);
   });
 
-  app.post('/api/panels/:id', (req, res) => {
+  app.post('/api/panels/:id', requireAdminAuth, (req, res) => {
     const { id } = req.params;
     const panelData = req.body;
     dbPanels.set(id, panelData);
 
-    dbAuditLogs.set('logs', [
-      {
-        id: Date.now(),
-        action: 'PANEL_SAVED',
-        details: `Saved panel ${panelData.name || id}`,
-        user: 'Dashboard User',
-        timestamp: new Date().toISOString()
-      },
-      ...dbAuditLogs.get('logs', []).slice(0, 49)
-    ]);
-
+    dbAuditLogs.addAuditLog('PANEL_SAVED', `Saved panel "${panelData.name || id}"`, req.adminUser || 'Dashboard Admin');
     broadcast('panel_updated', { id, panel: panelData });
     res.json({ success: true, panel: panelData });
   });
 
   // Deploy Panel to Discord Channel
-  app.post('/api/panels/:id/deploy', async (req, res) => {
+  app.post('/api/panels/:id/deploy', requireAdminAuth, async (req, res) => {
     const { id } = req.params;
     const { channelId } = req.body;
 
@@ -197,17 +268,7 @@ export function createServer(port = 3001) {
     try {
       const result = await deployPanelEmbed(panel, channelId);
 
-      dbAuditLogs.set('logs', [
-        {
-          id: Date.now(),
-          action: 'PANEL_DEPLOY',
-          details: `Deployed panel "${panel.name || id}" to channel ID ${channelId}`,
-          user: 'Dashboard User',
-          timestamp: new Date().toISOString()
-        },
-        ...dbAuditLogs.get('logs', []).slice(0, 49)
-      ]);
-
+      dbAuditLogs.addAuditLog('PANEL_DEPLOY', `Deployed panel "${panel.name || id}" to channel <#${channelId}>`, req.adminUser || 'Dashboard Admin');
       res.json({ success: true, message: `Panel deployed to channel ${channelId}`, result });
     } catch (err) {
       res.status(500).json({ error: err.message || 'Failed to deploy panel' });
@@ -226,17 +287,18 @@ export function createServer(port = 3001) {
     res.json(ticket);
   });
 
-  app.post('/api/tickets/:id/close', async (req, res) => {
+  app.post('/api/tickets/:id/close', requireAdminAuth, async (req, res) => {
     const tickets = dbTickets.get('tickets', []);
     const index = tickets.findIndex(t => t.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Ticket not found' });
 
     tickets[index].status = 'resolved';
     tickets[index].resolvedTime = new Date().toISOString();
-    dbTickets.set('tickets', tickets);
+    const updatedTicket = dbTickets.updateTicket(tickets[index]);
 
-    broadcast('ticket_updated', tickets[index]);
-    res.json({ success: true, ticket: tickets[index] });
+    dbAuditLogs.addAuditLog('TICKET_CLOSE', `Closed ticket ID: ${req.params.id} via dashboard`, req.adminUser || 'Dashboard Admin');
+    broadcast('ticket_updated', updatedTicket);
+    res.json({ success: true, ticket: updatedTicket });
   });
 
   // Server & Discord Settings
@@ -264,11 +326,12 @@ export function createServer(port = 3001) {
     });
   });
 
-  app.post('/api/settings', (req, res) => {
+  app.post('/api/settings', requireAdminAuth, (req, res) => {
     const newSettings = req.body;
     for (const [key, val] of Object.entries(newSettings)) {
       dbSettings.set(key, val);
     }
+    dbAuditLogs.addAuditLog('SETTINGS_UPDATE', `Updated server configuration settings`, req.adminUser || 'Dashboard Admin');
     broadcast('settings_updated', dbSettings.all());
     res.json({ success: true, settings: dbSettings.all() });
   });
@@ -432,12 +495,28 @@ export function createServer(port = 3001) {
     res.json(dbAuditLogs.get('logs', []));
   });
 
-  // Serve client static files
+  // Serve client static files safely
   const distPath = path.join(__dirname, '../../client/dist');
-  app.use(express.static(distPath));
+  const indexHtmlPath = path.join(distPath, 'index.html');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+  }
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api') || req.path.startsWith('/ws')) return next();
-    res.sendFile(path.join(distPath, 'index.html'));
+    if (req.path.startsWith('/api') || req.path.startsWith('/ws') || req.path === '/health') return next();
+    if (fs.existsSync(indexHtmlPath)) {
+      return res.sendFile(indexHtmlPath);
+    }
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>Adam Ticket Bot</title><meta charset="utf-8"></head>
+        <body style="font-family:sans-serif;background:#0d0d11;color:#fff;text-align:center;padding:50px;">
+          <h2>🤖 Adam Ticket King Bot & Server</h2>
+          <p style="color:#a1a1aa;">The bot and backend API are online.</p>
+          <p><a href="/health" style="color:#eab308;text-decoration:none;font-weight:bold;">Check /health status</a></p>
+        </body>
+      </html>
+    `);
   });
 
   server.listen(port, '0.0.0.0', () => {

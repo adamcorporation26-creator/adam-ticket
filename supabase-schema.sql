@@ -49,8 +49,24 @@ CREATE INDEX IF NOT EXISTS idx_tickets_guild ON tickets(guild_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_author ON tickets(author_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id);
 
--- Disable RLS (Row Level Security) so the Node.js backend can read and write with service/anon keys
-ALTER TABLE panels DISABLE ROW LEVEL SECURITY;
-ALTER TABLE tickets DISABLE ROW LEVEL SECURITY;
-ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs DISABLE ROW LEVEL SECURITY;
+-- ==============================================================================
+-- SECURITY & ROW LEVEL SECURITY (RLS)
+-- ==============================================================================
+-- When using SUPABASE_SERVICE_ROLE_KEY in .env, the backend bypasses RLS automatically.
+-- Enable RLS to prevent public access via the Anon Key from exposing sensitive ticket data:
+ALTER TABLE panels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+-- Allow Service Role full access to all tables:
+CREATE POLICY "Service Role Full Access on panels" ON panels FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service Role Full Access on tickets" ON tickets FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service Role Full Access on settings" ON settings FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service Role Full Access on audit_logs" ON audit_logs FOR ALL USING (auth.role() = 'service_role');
+
+-- If you only have SUPABASE_ANON_KEY (development only), you can optionally disable RLS:
+-- ALTER TABLE panels DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE tickets DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
+-- ALTER TABLE audit_logs DISABLE ROW LEVEL SECURITY;

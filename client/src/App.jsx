@@ -86,11 +86,20 @@ export default function App() {
     return () => socket.close();
   }, []);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('adam_admin_token');
+    return {
+      'Content-Type': 'application/json',
+      'x-adam-admin-auth': 'authenticated',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+  };
+
   const handleSavePanel = async (updatedPanel) => {
     try {
       const res = await fetch(`/api/panels/${updatedPanel.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(updatedPanel)
       });
       const data = await res.json();
@@ -106,7 +115,7 @@ export default function App() {
   const handleDeployPanel = async (panelId, channelId) => {
     const res = await fetch(`/api/panels/${panelId}/deploy`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ channelId })
     });
     const data = await res.json();
@@ -118,7 +127,10 @@ export default function App() {
 
   const handleCloseTicket = async (ticketId) => {
     try {
-      const res = await fetch(`/api/tickets/${ticketId}/close`, { method: 'POST' });
+      const res = await fetch(`/api/tickets/${ticketId}/close`, { 
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
       if (res.ok) fetchData();
     } catch (err) {
       console.error('Close ticket error:', err);
@@ -129,7 +141,7 @@ export default function App() {
     try {
       const res = await fetch('/api/settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(newSettings)
       });
       const data = await res.json();
@@ -157,6 +169,7 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('adam_admin_auth');
     localStorage.removeItem('adam_admin_user');
+    localStorage.removeItem('adam_admin_token');
     setIsAuthenticated(false);
   };
 

@@ -25,10 +25,27 @@ process.on('uncaughtException', (err) => {
 
 async function main() {
   console.log('🚀 Starting Ticket King Bot & Web Server...');
-  await initDatabase();
+  
+  // 1. Bind HTTP Server FIRST so Render detects the port immediately and health check succeeds
   const { broadcast } = createServer(PORT);
-  await initBot(broadcast);
-  console.log(`✨ Localhost Web Dashboard ready at http://localhost:${PORT}`);
+  console.log(`✨ Web Server listening on port ${PORT} (0.0.0.0:${PORT})`);
+
+  // 2. Initialize Database from Supabase asynchronously
+  try {
+    await initDatabase();
+  } catch (dbErr) {
+    console.error('[Startup] Warning during Database sync:', dbErr.message);
+  }
+
+  // 3. Connect Discord Bot to Gateway
+  try {
+    const client = await initBot(broadcast);
+    if (!client) {
+      console.warn('[Startup] ⚠️ Bot did not start. Check your DISCORD_TOKEN environment variable in Render.');
+    }
+  } catch (botErr) {
+    console.error('[Startup] Error connecting Discord Bot:', botErr.message);
+  }
 }
 
 main().catch(err => {
