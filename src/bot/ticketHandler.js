@@ -8,7 +8,8 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  AttachmentBuilder
+  AttachmentBuilder,
+  MessageFlags
 } from 'discord.js';
 import { dbPanels, dbTickets, dbSettings, dbAuditLogs } from '../db/database.js';
 
@@ -18,9 +19,37 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
   const { customId, guild, user, member } = interaction;
 
   if (!customId.startsWith('ticket_create_')) return;
+  if (!guild) return;
+
+  // Safe interaction reply helper that handles deferred/non-deferred state and catches expired token errors
+  const safeReply = async (payload) => {
+    try {
+      if (interaction.deferred || interaction.replied) {
+        return await interaction.editReply(payload);
+      } else {
+        const replyPayload = typeof payload === 'string' ? { content: payload } : { ...payload };
+        return await interaction.reply({ ...replyPayload, flags: MessageFlags.Ephemeral });
+      }
+    } catch (e) {
+      if (e.code !== 10062 && e.code !== 40060) {
+        console.warn('[Ticket Button] Reply error:', e.message);
+      }
+    }
+  };
 
   // Acknowledge interaction quickly to avoid timeout
-  await interaction.deferReply({ ephemeral: true });
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    }
+  } catch (err) {
+    if (err.code === 10062 || err.code === 40060) {
+      console.warn(`[Discord Bot] Ticket interaction expired or already acknowledged: ${err.message}`);
+      return;
+    }
+    console.error('[Discord Bot] Failed to defer ticket reply:', err);
+    return;
+  }
 
   try {
     const panels = dbPanels.all();
@@ -32,7 +61,7 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
     const panel = panels[panelKey];
 
     if (!panel) {
-      return interaction.editReply({ content: '❌ Ticket panel configuration not found.' });
+      return safeReply({ content: '❌ Ticket panel configuration not found.' });
     }
 
     // Check blocked roles
@@ -41,7 +70,7 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
         panel.blockedRoles.includes(r.name) || panel.blockedRoles.includes(r.id)
       );
       if (hasBlockedRole) {
-        return interaction.editReply({ content: '🚫 You are blocked from creating tickets.' });
+        return safeReply({ content: '🚫 You are blocked from creating tickets.' });
       }
     }
 
@@ -65,7 +94,7 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       }
 
       if (existingChannel) {
-        return interaction.editReply({
+        return safeReply({
           content: `❌ **Ticket Limit Reached**: You already have an open ticket in <#${existingOpenTicket.channelId}>!\n\nPlease resolve or close your existing ticket before opening a new one.`
         });
       } else {
@@ -307,13 +336,13 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
       await logChannel.send({ embeds: [logEmbed] }).catch((e) => console.log('Error sending open log:', e.message));
     }
 
-    return interaction.editReply({
+    return safeReply({
       content: `✅ Your ticket has been created! Go to <#${ticketChannel.id}>`
     });
 
   } catch (err) {
     console.error('Error handling ticket creation:', err);
-    return interaction.editReply({
+    return safeReply({
       content: `❌ Failed to create ticket: ${err.message}`
     });
   }
@@ -323,10 +352,31 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
 export async function handleTicketControlButtons(interaction, broadcastWs) {
   if (!interaction.isButton()) return;
   const { customId, channel, user, guild } = interaction;
+  if (!guild) return;
+
+  const safeReply = async (payload, ephemeral = false) => {
+    try {
+      if (interaction.deferred || interaction.replied) {
+        return await interaction.editReply(payload);
+      } else {
+        const replyPayload = typeof payload === 'string' ? { content: payload } : { ...payload };
+        if (ephemeral) replyPayload.flags = MessageFlags.Ephemeral;
+        return await interaction.reply(replyPayload);
+      }
+    } catch (e) {
+      if (e.code !== 10062 && e.code !== 40060) {
+        console.warn('[Control Button] Reply error:', e.message);
+      }
+    }
+  };
 
   if (customId.startsWith('ticket_close_')) {
-    await interaction.deferReply({ ephemeral: false }).catch(() => {});
-    await interaction.editReply({ content: '🔒 Closing ticket, generating receipt, and sending feedback request...' }).catch(() => {});
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply().catch(() => {});
+      }
+    } catch (e) {}
+    await safeReply({ content: '🔒 Closing ticket, generating receipt, and sending feedback request...' });
 
     const tickets = dbTickets.get('tickets', []);
     const ticketIndex = tickets.findIndex(t => t.channelId === channel.id);
@@ -464,14 +514,17 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
 
     // Prevent ticket author from claiming their own ticket
     if (targetTicket && targetTicket.authorId === user.id) {
-      return interaction.reply({
-        content: '🚫 **Claim Restricted**: You cannot claim your own ticket! Only staff members can claim tickets.',
-        ephemeral: true
-      });
+      return safeReply({
+        content: '🚫 **Claim Restricted**: You cannot claim your own ticket! Only staff members can claim tickets.'
+      }, true);
     }
 
-    await interaction.deferReply({ ephemeral: false }).catch(() => {});
-    await interaction.editReply({ content: `🙋‍♂️ Ticket claimed by <@${user.id}>!` }).catch(() => {});
+    try {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply().catch(() => {});
+      }
+    } catch (e) {}
+    await safeReply({ content: `🙋‍♂️ Ticket claimed by <@${user.id}>!` });
 
     // Move channel into Category upon claim
     const panel = (targetTicket?.panelId && dbPanels.get(targetTicket.panelId)) || dbPanels.get('default-purchase-panel');
@@ -512,6 +565,22 @@ export async function handleTicketControlButtons(interaction, broadcastWs) {
 
 // Handle star rating button clicks (1-5 stars) and feedback modal submission
 export async function handleTicketRatingInteraction(interaction, broadcastWs) {
+  const safeReply = async (payload, ephemeral = true) => {
+    try {
+      if (interaction.deferred || interaction.replied) {
+        return await interaction.editReply(payload);
+      } else {
+        const replyPayload = typeof payload === 'string' ? { content: payload } : { ...payload };
+        if (ephemeral) replyPayload.flags = MessageFlags.Ephemeral;
+        return await interaction.reply(replyPayload);
+      }
+    } catch (e) {
+      if (e.code !== 10062 && e.code !== 40060) {
+        console.warn('[Rating Button] Reply error:', e.message);
+      }
+    }
+  };
+
   // 1. Star Rating Button Click
   if (interaction.isButton() && interaction.customId.startsWith('ticket_rate_')) {
     const parts = interaction.customId.split('_');
@@ -535,7 +604,11 @@ export async function handleTicketRatingInteraction(interaction, broadcastWs) {
       const firstRow = new ActionRowBuilder().addComponents(feedbackInput);
       modal.addComponents(firstRow);
 
-      await interaction.showModal(modal);
+      try {
+        await interaction.showModal(modal);
+      } catch (err) {
+        console.warn('[Discord Bot] Error showing feedback modal:', err.message);
+      }
       return;
     } else {
       // 4-5 stars: Log rating immediately and reply
@@ -552,10 +625,9 @@ export async function handleTicketRatingInteraction(interaction, broadcastWs) {
         if (broadcastWs) broadcastWs('ticket_updated', updatedTicket);
       }
 
-      await interaction.reply({
-        content: '• **Thank you.** We appreciate your rating.',
-        ephemeral: true
-      });
+      await safeReply({
+        content: '• **Thank you.** We appreciate your rating.'
+      }, true);
 
       // Post Feedback Log to Guild Log Channel
       sendFeedbackLogToGuild(interaction, updatedTicket, stars, 'Logged for team (4-5 stars)');
@@ -584,10 +656,9 @@ export async function handleTicketRatingInteraction(interaction, broadcastWs) {
       if (broadcastWs) broadcastWs('ticket_updated', updatedTicket);
     }
 
-    await interaction.reply({
-      content: '• **Thank you.** We appreciate your rating.',
-      ephemeral: true
-    });
+    await safeReply({
+      content: '• **Thank you.** We appreciate your rating.'
+    }, true);
 
     // Post Feedback Log to Guild Log Channel
     sendFeedbackLogToGuild(interaction, updatedTicket, stars, userMessage);

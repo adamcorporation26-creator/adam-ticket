@@ -7,9 +7,13 @@ import {
   ButtonStyle,
   REST,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  Events,
+  MessageFlags,
+  PermissionFlagsBits
 } from 'discord.js';
 import dotenv from 'dotenv';
+import { dbPanels } from '../db/database.js';
 import { handleTicketButtonInteraction, handleTicketControlButtons, handleTicketRatingInteraction, rearrangeGuildTickets } from './ticketHandler.js';
 
 dotenv.config();
@@ -43,7 +47,17 @@ export async function initBot(broadcastWs) {
 
   clientInstance = client;
 
-  client.once('ready', async () => {
+  // Error listeners to prevent unhandled EventEmitter error crashes
+  client.on('error', (err) => {
+    console.error('[Discord Bot Client Error]', err);
+  });
+
+  client.on('warn', (warning) => {
+    console.warn('[Discord Bot Client Warning]', warning);
+  });
+
+  // ClientReady replaces deprecated ready event in discord.js v14/v15
+  client.once(Events.ClientReady, async () => {
     console.log(`[Discord Bot] Logged in successfully as ${client.user.tag}`);
     for (const [id, g] of client.guilds.cache) {
       try {
@@ -55,34 +69,61 @@ export async function initBot(broadcastWs) {
   });
 
   client.on('interactionCreate', async (interaction) => {
-    if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'panel') {
-        const ownerId = process.env.OWNER_ID || '842417480521089054';
-        const isOwner = interaction.user.id === ownerId || interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
+    try {
+      if (interaction.isChatInputCommand()) {
+        if (interaction.commandName === 'panel') {
+          const ownerId = process.env.OWNER_ID || '842417480521089054';
+          const isOwner = interaction.user.id === ownerId || interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
 
-        if (!isOwner) {
-          return interaction.reply({
-            content: `🚫 **Access Denied**: This bot is private and can only be controlled by its owner (<@${ownerId}>).`,
-            ephemeral: true
-          });
+          if (!isOwner) {
+            return interaction.reply({
+              content: `🚫 **Access Denied**: This bot is private and can only be controlled by its owner (<@${ownerId}>).`,
+              flags: MessageFlags.Ephemeral
+            }).catch(() => {});
+          }
+
+          const channel = interaction.options.getChannel('target_channel') || interaction.channel;
+          const panelData = dbPanels.get('default-purchase-panel') || Object.values(dbPanels.all())[0];
+          if (!panelData) {
+            return interaction.reply({
+              content: '❌ Panel configuration not found.',
+              flags: MessageFlags.Ephemeral
+            }).catch(() => {});
+          }
+
+          await deployPanelEmbed(panelData, channel.id);
+          await interaction.reply({
+            content: `✅ Panel deployed to <#${channel.id}>!`,
+            flags: MessageFlags.Ephemeral
+          }).catch(() => {});
         }
-
-        const channel = interaction.options.getChannel('target_channel') || interaction.channel;
-        const panelData = reqPanelData();
-        await deployPanelEmbed(panelData, channel.id);
-        await interaction.reply({ content: `✅ Panel deployed to <#${channel.id}>!`, ephemeral: true });
+      } else if (interaction.isButton()) {
+        if (interaction.customId.startsWith('ticket_create_')) {
+          await handleTicketButtonInteraction(interaction, wsBroadcastFn);
+        } else if (interaction.customId.startsWith('ticket_close_') || interaction.customId.startsWith('ticket_claim_')) {
+          await handleTicketControlButtons(interaction, wsBroadcastFn);
+        } else if (interaction.customId.startsWith('ticket_rate_')) {
+          await handleTicketRatingInteraction(interaction, wsBroadcastFn);
+        }
+      } else if (interaction.isModalSubmit()) {
+        if (interaction.customId.startsWith('ticket_feedback_modal_')) {
+          await handleTicketRatingInteraction(interaction, wsBroadcastFn);
+        }
       }
-    } else if (interaction.isButton()) {
-      if (interaction.customId.startsWith('ticket_create_')) {
-        await handleTicketButtonInteraction(interaction, wsBroadcastFn);
-      } else if (interaction.customId.startsWith('ticket_close_') || interaction.customId.startsWith('ticket_claim_')) {
-        await handleTicketControlButtons(interaction, wsBroadcastFn);
-      } else if (interaction.customId.startsWith('ticket_rate_')) {
-        await handleTicketRatingInteraction(interaction, wsBroadcastFn);
-      }
-    } else if (interaction.isModalSubmit()) {
-      if (interaction.customId.startsWith('ticket_feedback_modal_')) {
-        await handleTicketRatingInteraction(interaction, wsBroadcastFn);
+    } catch (err) {
+      console.error('[Discord Bot] Error processing interaction:', err);
+      // If error is Unknown interaction (10062) or Already acknowledged (40060), don't attempt secondary response
+      if (err.code === 10062 || err.code === 40060) return;
+      try {
+        if (interaction.isRepliable()) {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content: '❌ An error occurred processing this action.' }).catch(() => {});
+          } else {
+            await interaction.reply({ content: '❌ An error occurred processing this action.', flags: MessageFlags.Ephemeral }).catch(() => {});
+          }
+        }
+      } catch (replyErr) {
+        // Suppress secondary reply failure
       }
     }
   });
@@ -105,7 +146,8 @@ async function registerSlashCommands(client) {
         .addChannelOption(opt => opt.setName('target_channel').setDescription('Channel to deploy panel into'))
     ].map(cmd => cmd.toJSON());
 
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    const token = process.env.DISCORD_TOKEN || DEFAULT_TOKEN;
+    const rest = new REST({ version: '10' }).setToken(token);
     const clientId = process.env.CLIENT_ID || client.user.id;
 
     if (process.env.GUILD_ID) {
@@ -280,6 +322,3 @@ export async function deployPanelEmbed(panelData, channelId) {
   };
 }
 
-function reqPanelData() {
-  import('../db/database.js').then(db => db.dbPanels.get('default-purchase-panel'));
-}

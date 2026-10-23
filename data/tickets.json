@@ -1695,6 +1695,88 @@
         }
       ],
       "closedBy": "susilxtreme"
+    },
+    {
+      "id": "ticket-155",
+      "ticketNumber": 155,
+      "ticketName": "buy-hrhridoy25000",
+      "topic": "╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬",
+      "status": "open",
+      "channelId": "1563175794883436584",
+      "guildId": "1521227404335513610",
+      "authorId": "1487885875919720599",
+      "authorTag": "hrhridoy25000",
+      "authorAvatar": "https://cdn.discordapp.com/avatars/1487885875919720599/5396d2dda2a6edca932801be69dc0e2e.webp",
+      "openTime": "2026-10-23T13:02:32.114Z",
+      "resolvedTime": null,
+      "panelId": "default-purchase-panel",
+      "messages": [
+        {
+          "author": "System",
+          "content": "Ticket created by hrhridoy25000",
+          "timestamp": "2026-10-23T13:02:32.114Z"
+        }
+      ]
+    },
+    {
+      "id": "ticket-156",
+      "ticketNumber": 156,
+      "ticketName": "buy-axayz_18",
+      "topic": "╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬",
+      "status": "open",
+      "channelId": "1563191629450584216",
+      "guildId": "1521227404335513610",
+      "authorId": "1505458605435130007",
+      "authorTag": "axayz_18",
+      "authorAvatar": "https://cdn.discordapp.com/avatars/1505458605435130007/19c513f329a141ecb6fb02eabeaa6bcc.webp",
+      "openTime": "2026-10-23T14:05:27.787Z",
+      "resolvedTime": null,
+      "panelId": "default-purchase-panel",
+      "messages": [
+        {
+          "author": "System",
+          "content": "Ticket created by axayz_18",
+          "timestamp": "2026-10-23T14:05:27.787Z"
+        }
+      ]
+    },
+    {
+      "id": "ticket-157",
+      "ticketNumber": 157,
+      "ticketName": "buy-yegambaram_61589",
+      "topic": "╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬",
+      "status": "resolved",
+      "channelId": "1563191685846925387",
+      "guildId": "1521227404335513610",
+      "authorId": "1374046427092750397",
+      "authorTag": "yegambaram_61589",
+      "authorAvatar": "https://cdn.discordapp.com/avatars/1374046427092750397/f41a1646bbb26e49bc57cbf0115f0163.webp",
+      "openTime": "2026-10-23T14:05:42.383Z",
+      "resolvedTime": "2026-10-23T14:06:04.017Z",
+      "panelId": "default-purchase-panel",
+      "messages": [
+        {
+          "author": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐈𝐂𝐊𝐄𝐓#2627",
+          "content": "<@&1521227404431855839> <@&1521227404431855841> <@&1532805478365528134>",
+          "timestamp": "2026-10-23T14:05:41.544Z"
+        },
+        {
+          "author": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐈𝐂𝐊𝐄𝐓#2627",
+          "content": "**What would you like to purchase?** Reply here with the product and any notes for staff.",
+          "timestamp": "2026-10-23T14:05:43.227Z"
+        },
+        {
+          "author": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐈𝐂𝐊𝐄𝐓#2627",
+          "content": "🔒 Closing ticket, generating receipt, and sending feedback request...",
+          "timestamp": "2026-10-23T14:06:04.241Z"
+        },
+        {
+          "author": "𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐈𝐂𝐊𝐄𝐓#2627",
+          "content": "🔒 Closing ticket, generating receipt, and sending feedback request...",
+          "timestamp": "2026-10-23T14:06:04.270Z"
+        }
+      ],
+      "closedBy": "abinayaxsuriya"
     }
   ]
 }

@@ -6,6 +6,15 @@ dotenv.config();
 
 const PORT = process.env.PORT || 3001;
 
+// Global process error handlers to prevent crashes from unhandled rejections or Discord API errors
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process] Unhandled Promise Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Process] Uncaught Exception:', err);
+});
+
 async function main() {
   console.log('🚀 Starting Ticket King Bot & Web Server...');
   const { broadcast } = createServer(PORT);
@@ -16,3 +25,4 @@ async function main() {
 main().catch(err => {
   console.error('Fatal startup error:', err);
 });
+
