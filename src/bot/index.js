@@ -18,7 +18,6 @@ import { dbPanels } from '../db/database.js';
 import { 
   handleTicketButtonInteraction, 
   handleTicketSelectMenuInteraction,
-  handleTicketModalSubmit,
   handleTicketControlButtons, 
   handleTicketRatingInteraction, 
   handleTicketSlashCommand,
@@ -144,8 +143,6 @@ export async function initBot(broadcastWs) {
       } else if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('ticket_feedback_modal_')) {
           await handleTicketRatingInteraction(interaction, wsBroadcastFn);
-        } else if (interaction.customId.startsWith('ticket_intake_modal_')) {
-          await handleTicketModalSubmit(interaction, wsBroadcastFn);
         }
       }
     } catch (err) {

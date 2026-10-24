@@ -23,7 +23,6 @@ export default function PanelSettingsModal({
 }) {
   const [ticketStyle, setTicketStyle] = useState(panel.channelType || 'text'); // 'text' | 'thread'
   const [selectionMode, setSelectionMode] = useState(panel.selectionMode || 'buttons'); // 'buttons' | 'dropdown' | 'both'
-  const [enableIntakeModal, setEnableIntakeModal] = useState(panel.disableIntakeModal !== true);
   const [selectPlaceholder, setSelectPlaceholder] = useState(panel.selectPlaceholder || '📂 Select a category to open a ticket...');
   const [category, setCategory] = useState(panel.category || 'Purchase');
   const [openLogChannel, setOpenLogChannel] = useState(panel.openLogChannel || '#ticket-logs');
@@ -79,7 +78,6 @@ export default function PanelSettingsModal({
       ...panel,
       channelType: ticketStyle,
       selectionMode,
-      disableIntakeModal: !enableIntakeModal,
       selectPlaceholder,
       category,
       openLogChannel,
@@ -187,32 +185,6 @@ export default function PanelSettingsModal({
             </div>
           </div>
 
-          {/* Interactive Modal Questionnaire Toggle */}
-          <div className="bg-[#151518] border border-zinc-800/90 rounded-2xl p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-extrabold text-white flex items-center gap-1.5">
-                  📝 Interactive Modal Questionnaire (Intake Form)
-                </h4>
-                <p className="text-[11px] text-zinc-400">
-                  Prompt users with pop-up questions (Product, Payment Method, Issue Details) before opening their ticket.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEnableIntakeModal(!enableIntakeModal)}
-                className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
-                  enableIntakeModal ? 'bg-yellow-500' : 'bg-zinc-800'
-                }`}
-              >
-                <div
-                  className={`bg-black w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                    enableIntakeModal ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
 
           {/* Component Selection Mode (Buttons vs Select Menu Dropdown) */}
           <div className="space-y-3">

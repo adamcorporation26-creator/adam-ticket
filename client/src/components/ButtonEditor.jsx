@@ -54,30 +54,6 @@ export default function ButtonEditor({ button, onUpdate, onDelete, onBack, emoji
 
   const currentColorObj = colorStyles.find(c => c.value === (button.style || 'Primary')) || colorStyles[0];
 
-  // Questions management
-  const questions = button.questions || [];
-
-  const addQuestion = () => {
-    const newQ = {
-      id: Date.now().toString(),
-      label: 'New Question',
-      placeholder: 'User answer here...',
-      required: true,
-      style: 'short' // 'short' or 'paragraph'
-    };
-    updateField('questions', [...questions, newQ]);
-  };
-
-  const updateQuestion = (index, qField, qVal) => {
-    const updated = [...questions];
-    updated[index] = { ...updated[index], [qField]: qVal };
-    updateField('questions', updated);
-  };
-
-  const removeQuestion = (index) => {
-    const updated = questions.filter((_, i) => i !== index);
-    updateField('questions', updated);
-  };
 
   return (
     <div className="bg-[#151518] border border-zinc-800/80 rounded-xl p-5 space-y-5 shadow-2xl">
@@ -364,74 +340,6 @@ export default function ButtonEditor({ button, onUpdate, onDelete, onBack, emoji
             </div>
           </div>
 
-          {/* Ticket Questions */}
-          <div className="space-y-3 pt-3 border-t border-zinc-800/80">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xs font-bold text-zinc-200">Ticket Questions</h3>
-                <p className="text-[11px] text-zinc-400">Configure questions that users must answer when creating a ticket.</p>
-              </div>
-              <button
-                type="button"
-                onClick={addQuestion}
-                className="px-2.5 py-1 bg-yellow-500/10 border border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/20 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3 h-3" /> Add Question
-              </button>
-            </div>
-
-            {questions.length > 0 ? (
-              <div className="space-y-2.5">
-                {questions.map((q, idx) => (
-                  <div key={q.id || idx} className="bg-[#18181c] border border-zinc-800 rounded-lg p-3 space-y-2 relative">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-zinc-300">Question #{idx + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeQuestion(idx)}
-                        className="text-zinc-500 hover:text-red-400 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <input
-                      type="text"
-                      value={q.label || ''}
-                      onChange={(e) => updateQuestion(idx, 'label', e.target.value)}
-                      placeholder="e.g. What product do you want to purchase?"
-                      className="w-full bg-[#1c1c20] border border-zinc-700/80 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-yellow-500"
-                    />
-
-                    <div className="flex items-center justify-between pt-1 text-[11px]">
-                      <label className="flex items-center gap-1.5 text-zinc-400 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={q.required !== false}
-                          onChange={(e) => updateQuestion(idx, 'required', e.target.checked)}
-                          className="rounded border-zinc-700 text-yellow-500 focus:ring-0 bg-zinc-800"
-                        />
-                        <span>Required field</span>
-                      </label>
-
-                      <select
-                        value={q.style || 'short'}
-                        onChange={(e) => updateQuestion(idx, 'style', e.target.value)}
-                        className="bg-[#1c1c20] border border-zinc-700/80 rounded px-2 py-0.5 text-[11px] text-zinc-300 focus:outline-none"
-                      >
-                        <option value="short">Short Input</option>
-                        <option value="paragraph">Paragraph Text</option>
-                      </select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-[#18181c] border border-zinc-800/80 border-dashed rounded-lg p-4 text-center text-[11px] text-zinc-500">
-                No custom questions configured. Users will open tickets directly.
-              </div>
-            )}
-          </div>
         </div>
       )}
 

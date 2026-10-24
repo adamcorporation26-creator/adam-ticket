@@ -20,115 +20,6 @@ export function normalizeName(str) {
   return str.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
-/**
- * Shows interactive Discord modal intake form before creating ticket
- */
-export async function showTicketIntakeModal(interaction, panel, categoryType = 'buy') {
-  const catNorm = (categoryType || 'buy').toLowerCase();
-  const modal = new ModalBuilder()
-    .setCustomId(`ticket_intake_modal_${panel.id || 'default'}_${categoryType}`);
-
-  if (catNorm.includes('support') || catNorm.includes('help')) {
-    modal.setTitle('🛠️ Support Ticket Intake');
-
-    const subjectInput = new TextInputBuilder()
-      .setCustomId('issue_subject')
-      .setLabel('Brief Issue Summary')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. Login issue / Payment not credited')
-      .setRequired(true)
-      .setMaxLength(100);
-
-    const detailsInput = new TextInputBuilder()
-      .setCustomId('issue_details')
-      .setLabel('Detailed Description of Issue')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Please describe what happened in detail...')
-      .setRequired(true)
-      .setMaxLength(1000);
-
-    const refInput = new TextInputBuilder()
-      .setCustomId('reference')
-      .setLabel('Order ID or Prior Ticket Ref (Optional)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. Order #1234 or N/A')
-      .setRequired(false)
-      .setMaxLength(100);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(subjectInput),
-      new ActionRowBuilder().addComponents(detailsInput),
-      new ActionRowBuilder().addComponents(refInput)
-    );
-  } else if (catNorm.includes('bill') || catNorm.includes('invoice') || catNorm.includes('refund')) {
-    modal.setTitle('💼 Billing & Invoice Intake');
-
-    const invoiceInput = new TextInputBuilder()
-      .setCustomId('invoice_id')
-      .setLabel('Invoice or Transaction ID')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. INV-2026 or Crypto TXID')
-      .setRequired(true)
-      .setMaxLength(100);
-
-    const issueInput = new TextInputBuilder()
-      .setCustomId('billing_issue')
-      .setLabel('Billing Details / Question')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Explain your billing question, refund, or invoice request...')
-      .setRequired(true)
-      .setMaxLength(1000);
-
-    const notesInput = new TextInputBuilder()
-      .setCustomId('notes')
-      .setLabel('Additional Information (Optional)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Account email, username, etc.')
-      .setRequired(false)
-      .setMaxLength(200);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(invoiceInput),
-      new ActionRowBuilder().addComponents(issueInput),
-      new ActionRowBuilder().addComponents(notesInput)
-    );
-  } else {
-    // Default to Buy / Purchase intake
-    modal.setTitle('🛒 Purchase Ticket Intake');
-
-    const productInput = new TextInputBuilder()
-      .setCustomId('product_name')
-      .setLabel('What product or package do you want?')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. Diamond Package / 10k Credits / 1 Month Sub')
-      .setRequired(true)
-      .setMaxLength(100);
-
-    const paymentInput = new TextInputBuilder()
-      .setCustomId('payment_method')
-      .setLabel('Preferred Payment Method & Currency')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. UPI, PayPal, Crypto (USDT), Card')
-      .setRequired(true)
-      .setMaxLength(100);
-
-    const notesInput = new TextInputBuilder()
-      .setCustomId('notes')
-      .setLabel('Additional Notes / Order Reference')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Any specific instructions, country, or promo code...')
-      .setRequired(false)
-      .setMaxLength(500);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(productInput),
-      new ActionRowBuilder().addComponents(paymentInput),
-      new ActionRowBuilder().addComponents(notesInput)
-    );
-  }
-
-  await interaction.showModal(modal);
-}
 
 /**
  * Handles Button clicks to open a ticket (shows intake modal or creates ticket)
@@ -196,18 +87,13 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
     // Determine category type from customId (e.g. ticket_create_support -> 'support')
     const categoryType = customId.replace('ticket_create_', '') || 'buy';
 
-    // If modal is explicitly disabled on panel, directly create ticket
-    if (panel.disableIntakeModal) {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      return await createTicketChannelAndPost({ interaction, panel, categoryType, intakeData: null, broadcastWs });
-    }
-
-    // Show intake modal
-    return await showTicketIntakeModal(interaction, panel, categoryType);
+    // Directly create ticket without intake form
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return await createTicketChannelAndPost({ interaction, panel, categoryType, broadcastWs });
   } catch (err) {
     console.error('[Ticket Button] Error processing:', err);
     if (!interaction.replied && !interaction.deferred) {
-      return interaction.reply({ content: `❌ Error opening ticket intake: ${err.message}`, flags: MessageFlags.Ephemeral }).catch(() => {});
+      return interaction.reply({ content: `❌ Error opening ticket: ${err.message}`, flags: MessageFlags.Ephemeral }).catch(() => {});
     }
   }
 }
@@ -274,72 +160,17 @@ export async function handleTicketSelectMenuInteraction(interaction, broadcastWs
     const selectedOption = values?.[0] || 'buy';
     const categoryType = selectedOption.replace('ticket_select_', '');
 
-    if (panel.disableIntakeModal) {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      return await createTicketChannelAndPost({ interaction, panel, categoryType, intakeData: null, broadcastWs });
-    }
-
-    return await showTicketIntakeModal(interaction, panel, categoryType);
+    // Directly create ticket without intake form
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return await createTicketChannelAndPost({ interaction, panel, categoryType, broadcastWs });
   } catch (err) {
     console.error('[Ticket Select Menu] Error processing:', err);
     if (!interaction.replied && !interaction.deferred) {
-      return interaction.reply({ content: `❌ Error opening ticket intake: ${err.message}`, flags: MessageFlags.Ephemeral }).catch(() => {});
+      return interaction.reply({ content: `❌ Error opening ticket: ${err.message}`, flags: MessageFlags.Ephemeral }).catch(() => {});
     }
   }
 }
 
-/**
- * Handles submitted modal questionnaires and forwards into ticket creation
- */
-export async function handleTicketModalSubmit(interaction, broadcastWs) {
-  if (!interaction.isModalSubmit()) return;
-  const { customId, guild } = interaction;
-  if (!customId.startsWith('ticket_intake_modal_') || !guild) return;
-
-  try {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    // Format: ticket_intake_modal_${panelId}_${categoryType}
-    const parts = customId.split('_');
-    const categoryType = parts[parts.length - 1] || 'buy';
-    const panelId = parts.slice(3, parts.length - 1).join('_') || 'default-purchase-panel';
-
-    const panel = dbPanels.get(panelId) || Object.values(dbPanels.all())[0];
-    if (!panel) {
-      return interaction.editReply({ content: '❌ Panel configuration not found.' });
-    }
-
-    const safeGetField = (fieldId) => {
-      try {
-        return interaction.fields.getTextInputValue(fieldId)?.trim() || null;
-      } catch (e) {
-        return null;
-      }
-    };
-
-    const intakeData = {
-      categoryType,
-      product: safeGetField('product_name'),
-      paymentMethod: safeGetField('payment_method'),
-      issueSubject: safeGetField('issue_subject'),
-      issueDetails: safeGetField('issue_details'),
-      invoiceId: safeGetField('invoice_id'),
-      billingIssue: safeGetField('billing_issue'),
-      reference: safeGetField('reference'),
-      notes: safeGetField('notes'),
-      submittedAt: new Date().toISOString()
-    };
-
-    return await createTicketChannelAndPost({ interaction, panel, categoryType, intakeData, broadcastWs });
-  } catch (err) {
-    console.error('[Ticket Modal Submit] Error:', err);
-    return interaction.editReply({ content: `❌ Failed to create ticket from form: ${err.message}` }).catch(() => {});
-  }
-}
-
-/**
- * Core ticket channel creation, permission overwrites, and welcome posting
- */
 export async function createTicketChannelAndPost({ interaction, panel, categoryType = 'buy', intakeData = null, broadcastWs }) {
   const { guild, user } = interaction;
 
@@ -553,29 +384,6 @@ export async function createTicketChannelAndPost({ interaction, panel, categoryT
       components: [controlRow]
     });
 
-    // Send Ticket Intake Details Embed if questionnaire was filled
-    if (intakeData) {
-      const intakeEmbed = new EmbedBuilder()
-        .setTitle(`📋 Ticket Intake Details • ${categoryType.toUpperCase()}`)
-        .setColor(isSupport ? '#38bdf8' : isBilling ? '#a855f7' : '#eab308')
-        .setAuthor({ 
-          name: `${user.tag} (${user.id})`, 
-          iconURL: user.displayAvatarURL() 
-        })
-        .setTimestamp();
-
-      if (intakeData.product) intakeEmbed.addFields({ name: '🛍️ Requested Product / Package', value: `\`\`\`${intakeData.product}\`\`\``, inline: false });
-      if (intakeData.paymentMethod) intakeEmbed.addFields({ name: '💳 Preferred Payment Method', value: `\`\`\`${intakeData.paymentMethod}\`\`\``, inline: true });
-      if (intakeData.issueSubject) intakeEmbed.addFields({ name: '📌 Issue Subject', value: `\`\`\`${intakeData.issueSubject}\`\`\``, inline: false });
-      if (intakeData.issueDetails) intakeEmbed.addFields({ name: '📝 Detailed Description', value: intakeData.issueDetails, inline: false });
-      if (intakeData.invoiceId) intakeEmbed.addFields({ name: '🧾 Invoice / Transaction Ref', value: `\`\`\`${intakeData.invoiceId}\`\`\``, inline: true });
-      if (intakeData.billingIssue) intakeEmbed.addFields({ name: '💼 Billing Inquiry', value: intakeData.billingIssue, inline: false });
-      if (intakeData.reference) intakeEmbed.addFields({ name: '🔗 Order Reference / ID', value: `\`\`\`${intakeData.reference}\`\`\``, inline: true });
-      if (intakeData.notes) intakeEmbed.addFields({ name: '📋 Additional Notes', value: intakeData.notes, inline: false });
-
-      await ticketChannel.send({ embeds: [intakeEmbed] });
-    }
-
     // Prompt message below
     const promptMessage = isSupport
       ? '**How can we help you?** Reply here with extra details or screenshots and staff will assist you shortly.'
@@ -643,12 +451,6 @@ export async function createTicketChannelAndPost({ interaction, panel, categoryT
           { name: '📋 Panel Option', value: panel.name || panel.id, inline: true }
         )
         .setTimestamp();
-
-      if (intakeData?.product) {
-        logEmbed.addFields({ name: '🛍️ Order', value: intakeData.product, inline: true });
-      } else if (intakeData?.issueSubject) {
-        logEmbed.addFields({ name: '📌 Subject', value: intakeData.issueSubject, inline: true });
-      }
 
       await logChannel.send({ embeds: [logEmbed] }).catch((e) => console.log('Error sending open log:', e.message));
     }
