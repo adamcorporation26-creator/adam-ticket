@@ -335,83 +335,80 @@ export async function deployPanelEmbed(panelData, channelId) {
   }
 
   const components = [];
-  const selectionMode = panelData.selectionMode || 'buttons'; // 'buttons' | 'dropdown' | 'both'
+  const actionRow = new ActionRowBuilder();
 
-  // 1. Dropdown Select Menu component if enabled or configured
-  if (selectionMode === 'dropdown' || selectionMode === 'both' || panelData.useSelectMenu || (panelData.selectOptions && panelData.selectOptions.length > 0)) {
-    const selectOptions = (panelData.selectOptions && panelData.selectOptions.length > 0)
-      ? panelData.selectOptions.map(opt => ({
-          label: opt.label || 'Select Category',
-          value: opt.value || opt.id || 'buy',
-          description: opt.description || undefined,
-          emoji: opt.emoji || undefined
-        }))
-      : [
-          {
-            label: 'Buy / Purchase',
-            value: 'buy',
-            description: 'Order products, packages, or services',
-            emoji: '🛒'
-          },
-          {
-            label: 'Technical Support',
-            value: 'support',
-            description: 'Assistance with existing orders or account',
-            emoji: '🛠️'
-          },
-          {
-            label: 'Billing & Invoices',
-            value: 'billing',
-            description: 'Invoices, refunds, and payment queries',
-            emoji: '💼'
-          },
-          {
-            label: 'General Inquiries',
-            value: 'general',
-            description: 'Partnerships, questions, or general help',
-            emoji: '❓'
-          }
-        ];
+  const isSupport = (panelData.id && panelData.id.toLowerCase().includes('support')) ||
+                    (panelData.name && panelData.name.toLowerCase().includes('support')) ||
+                    (panelData.customTicketName && panelData.customTicketName.toLowerCase().includes('support'));
 
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(`ticket_select_menu_${panelData.id || 'default'}`)
-      .setPlaceholder(panelData.selectPlaceholder || '📂 Select a category to open a ticket...')
-      .addOptions(selectOptions.slice(0, 25)); // Discord max 25 options
+  let buttons = panelData.buttons && panelData.buttons.length > 0 ? [...panelData.buttons] : [];
 
-    components.push(new ActionRowBuilder().addComponents(selectMenu));
-  }
-
-  // 2. Button Action Row if selectionMode is 'buttons' or 'both'
-  if (selectionMode !== 'dropdown') {
-    const buttons = panelData.buttons || [];
-    const actionRow = new ActionRowBuilder();
-
-    if (buttons.length > 0) {
-      buttons.forEach(b => {
-        let style = ButtonStyle.Primary;
-        if (b.style === 'Secondary') style = ButtonStyle.Secondary;
-        if (b.style === 'Success') style = ButtonStyle.Success;
-        if (b.style === 'Danger') style = ButtonStyle.Danger;
-
-        const btn = new ButtonBuilder()
-          .setCustomId(b.customId || `ticket_create_${b.id || 'default'}`)
-          .setLabel(b.label || 'Open Ticket')
-          .setStyle(style);
-
-        if (b.emoji) btn.setEmoji(b.emoji);
-        actionRow.addComponents(btn);
-      });
+  if (buttons.length === 0) {
+    if (isSupport) {
+      buttons = [
+        {
+          id: 'support_btn',
+          label: 'Get Support',
+          style: 'Danger',
+          emoji: '🎫',
+          customId: 'ticket_create_support'
+        }
+      ];
     } else {
-      actionRow.addComponents(
-        new ButtonBuilder()
-          .setCustomId('ticket_create_buy')
-          .setLabel('Buy')
-          .setEmoji('🛒')
-          .setStyle(ButtonStyle.Primary)
-      );
+      buttons = [
+        {
+          id: 'buy_btn',
+          label: 'Buy',
+          style: 'Danger',
+          emoji: '🛒',
+          customId: 'ticket_create_buy'
+        }
+      ];
     }
-    components.push(actionRow);
   }
+
+  // Ensure button labels match user requirements: "Buy in buy tickets and Get Support in support tickets"
+  buttons.forEach(b => {
+    let label = b.label || 'Open Ticket';
+    let customId = b.customId || `ticket_create_${b.id || 'default'}`;
+
+    if (isSupport) {
+      if (!b.label || b.label === 'Open Ticket' || b.label === 'Support') {
+        label = 'Get Support';
+      }
+      if (!b.customId || b.customId === 'ticket_create_default') {
+        customId = 'ticket_create_support';
+      }
+    } else {
+      if (!b.label || b.label === 'Open Ticket') {
+        label = 'Buy';
+      }
+      if (!b.customId || b.customId === 'ticket_create_default') {
+        customId = 'ticket_create_buy';
+      }
+    }
+
+    let style = ButtonStyle.Danger;
+    if (b.style === 'Primary') style = ButtonStyle.Primary;
+    if (b.style === 'Secondary') style = ButtonStyle.Secondary;
+    if (b.style === 'Success') style = ButtonStyle.Success;
+    if (b.style === 'Danger') style = ButtonStyle.Danger;
+
+    const btn = new ButtonBuilder()
+      .setCustomId(customId)
+      .setLabel(label)
+      .setStyle(style);
+
+    if (b.emoji) {
+      btn.setEmoji(b.emoji);
+    } else {
+      btn.setEmoji(isSupport ? '🎫' : '🛒');
+    }
+
+    actionRow.addComponents(btn);
+  });
+
+  components.push(actionRow);
 
   // Check if we can edit an existing message sent by this bot in this channel!
   let existingMessage = null;

@@ -152,6 +152,56 @@ export const dbPanels = new SupabaseDatabase({
         customId: 'ticket_create_buy'
       }
     ],
+    selectionMode: 'buttons',
+    permissions: {
+      addReactions: true,
+      attachFiles: true,
+      embedLinks: false,
+      sendVoiceMessages: true,
+      useExternalEmojis: true,
+      useExternalStickers: true,
+      useAppCommands: false
+    }
+  },
+  'default-support-panel': {
+    id: 'default-support-panel',
+    name: 'Support Ticket Panel',
+    channelType: 'text',
+    category: '╰--- 𝐒𝐮𝐩𝐩𝐨𝐫𝐭',
+    supportRoles: ['𝐒𝐭𝐚𝐟𝐟', '𝐌𝐚𝐧𝐚𝐠𝐞𝐫', '𝐅𝐨𝐮𝐧𝐝𝐞𝐫'],
+    blockedRoles: [],
+    customTicketName: 'support-{USER_NAME}',
+    openLogChannel: '#𝐒𝐮𝐩𝐩𝐨𝐫𝐭-𝐓𝐢𝐜𝐤𝐞𝐭-𝐋𝐨𝐠𝐬',
+    closeLogChannel: '#𝐒𝐮𝐩𝐩𝐨𝐫𝐭-𝐓𝐢𝐜𝐤𝐞𝐭-𝐋𝐨𝐠𝐬',
+    embed: {
+      authorName: 'ADAM Corporation Support',
+      authorUrl: '',
+      authorIconUrl: '',
+      title: '',
+      titleUrl: '',
+      description: '<:140268information:1559615872409272419> Rules\n• Tickets Are For **Support** Only.\n• Any Other Requests = **Instant Ban**.\n• Stay **Respectful** Or Risk **Removal**.\n',
+      color: '#ff0037',
+      thumbnailUrl: '',
+      imageUrl: 'https://cdn.discordapp.com/attachments/1469382427985186829/1560177770300973136/image.png',
+      footerIconUrl: '',
+      footerText: ''
+    },
+    welcomeMessage: {
+      content: 'Welcome {USER}. Our support team will assist you in {GUILD_NAME}.\n\nWait for a moment our Staffs will help you!!',
+      embedTitle: 'Support Ticket Created!',
+      embedDescription: 'Please describe your issue in detail. Staff will respond shortly.',
+      color: '#e11d48'
+    },
+    buttons: [
+      {
+        id: 'support_btn',
+        label: 'Get Support',
+        style: 'Danger',
+        emoji: '🎫',
+        customId: 'ticket_create_support'
+      }
+    ],
+    selectionMode: 'buttons',
     permissions: {
       addReactions: true,
       attachFiles: true,

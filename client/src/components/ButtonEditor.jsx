@@ -35,12 +35,13 @@ export default function ButtonEditor({ button, onUpdate, onDelete, onBack, emoji
   };
 
   const handleReset = () => {
+    const isSupport = button.id === 'support_btn' || (button.customId && button.customId.includes('support'));
     onUpdate({
       ...button,
-      label: 'Buy',
-      style: 'Primary',
-      emoji: '🛒',
-      customId: `ticket_create_${button.id || 'buy'}`
+      label: isSupport ? 'Get Support' : 'Buy',
+      style: 'Danger',
+      emoji: isSupport ? '🎫' : '🛒',
+      customId: isSupport ? 'ticket_create_support' : 'ticket_create_buy'
     });
   };
 

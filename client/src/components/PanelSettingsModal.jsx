@@ -22,8 +22,7 @@ export default function PanelSettingsModal({
   categories = []
 }) {
   const [ticketStyle, setTicketStyle] = useState(panel.channelType || 'text'); // 'text' | 'thread'
-  const [selectionMode, setSelectionMode] = useState(panel.selectionMode || 'buttons'); // 'buttons' | 'dropdown' | 'both'
-  const [selectPlaceholder, setSelectPlaceholder] = useState(panel.selectPlaceholder || '📂 Select a category to open a ticket...');
+  const selectionMode = 'buttons';
   const [category, setCategory] = useState(panel.category || 'Purchase');
   const [openLogChannel, setOpenLogChannel] = useState(panel.openLogChannel || '#ticket-logs');
   const [closeLogChannel, setCloseLogChannel] = useState(panel.closeLogChannel || '#ticket-logs');
@@ -77,8 +76,7 @@ export default function PanelSettingsModal({
     const updatedPanel = {
       ...panel,
       channelType: ticketStyle,
-      selectionMode,
-      selectPlaceholder,
+      selectionMode: 'buttons',
       category,
       openLogChannel,
       closeLogChannel,
@@ -186,49 +184,7 @@ export default function PanelSettingsModal({
           </div>
 
 
-          {/* Component Selection Mode (Buttons vs Select Menu Dropdown) */}
-          <div className="space-y-3">
-            <div>
-              <h4 className="text-xs font-extrabold text-white">Panel Component Style</h4>
-              <p className="text-[11px] text-zinc-400">
-                Choose how categories and options appear on your Discord embed panel.
-              </p>
-            </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { id: 'buttons', label: 'Buttons', desc: 'Standard action buttons' },
-                { id: 'dropdown', label: 'Dropdown Menu', desc: 'Discord select dropdown' },
-                { id: 'both', label: 'Both', desc: 'Dropdown + Quick buttons' }
-              ].map(opt => (
-                <div
-                  key={opt.id}
-                  onClick={() => setSelectionMode(opt.id)}
-                  className={`p-3 rounded-xl border-2 cursor-pointer transition-all text-center space-y-1 ${
-                    selectionMode === opt.id
-                      ? 'bg-yellow-500/10 border-yellow-500 text-yellow-400'
-                      : 'bg-[#151518] border-zinc-800 text-zinc-300 hover:border-zinc-700'
-                  }`}
-                >
-                  <div className="font-bold text-xs">{opt.label}</div>
-                  <div className="text-[10px] text-zinc-400">{opt.desc}</div>
-                </div>
-              ))}
-            </div>
-
-            {(selectionMode === 'dropdown' || selectionMode === 'both') && (
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[11px] font-semibold text-zinc-300">Dropdown Placeholder Text</label>
-                <input
-                  type="text"
-                  value={selectPlaceholder}
-                  onChange={(e) => setSelectPlaceholder(e.target.value)}
-                  placeholder="📂 Select a category to open a ticket..."
-                  className="w-full bg-[#151518] border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-yellow-500"
-                />
-              </div>
-            )}
-          </div>
 
           <div className="border-t border-zinc-800/80 pt-4">
             <h3 className="text-sm font-extrabold text-white">Panel Defaults</h3>

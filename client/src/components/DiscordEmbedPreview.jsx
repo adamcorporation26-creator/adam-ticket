@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShoppingCart, Copy, Trash2, Plus, GripVertical, Link as LinkIcon, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Copy, Trash2, Plus, GripVertical, Link as LinkIcon } from 'lucide-react';
 
 export default function DiscordEmbedPreview({ 
   embedData = {}, 
@@ -8,9 +8,7 @@ export default function DiscordEmbedPreview({
   onSelectButton, 
   onAddButton, 
   onDeleteButton,
-  embedTitle = 'Embed 1',
-  selectionMode = 'buttons',
-  selectPlaceholder = '📂 Select a category to open a ticket...'
+  embedTitle = 'Embed 1'
 }) {
   const {
     authorName = 'ADAM CORPORATION',
@@ -215,35 +213,14 @@ export default function DiscordEmbedPreview({
         </div>
       </div>
 
-      {/* Interaction Area (Select Menu / Buttons) */}
+      {/* Interaction Area (Buttons) */}
       <div className="space-y-3 pt-3 border-t border-zinc-800">
         <div className="flex items-center justify-between text-[11px] text-zinc-400">
           <span className="font-bold text-zinc-200">Interaction Area</span>
-          <span className="text-[10px] text-zinc-500">Rows available [1/5]</span>
+          <span className="text-[10px] text-zinc-500">Button Row [1/5]</span>
         </div>
 
-        {/* Dropdown Select Menu Preview Row if selectionMode is 'dropdown' or 'both' */}
-        {(selectionMode === 'dropdown' || selectionMode === 'both') && (
-          <div className="bg-[#151518] border border-zinc-800 rounded-xl p-3 space-y-2 shadow-lg">
-            <div className="flex items-center justify-between text-[11px] text-zinc-400 border-b border-zinc-800 pb-2">
-              <div className="flex items-center gap-1.5 font-bold text-zinc-300">
-                <GripVertical className="w-3.5 h-3.5 text-zinc-600 cursor-grab" />
-                <span>Dropdown Select Menu</span>
-              </div>
-              <span className="text-[10px] text-yellow-400 font-mono">SelectMenuRow</span>
-            </div>
-            <div className="bg-[#1e1f22] border border-zinc-700/80 rounded-lg p-2.5 flex items-center justify-between text-xs text-zinc-300 shadow-inner">
-              <div className="flex items-center gap-2">
-                <span>📂</span>
-                <span className="text-zinc-400 font-medium">{selectPlaceholder || 'Select a category to open a ticket...'}</span>
-              </div>
-              <ChevronDown className="w-4 h-4 text-zinc-500" />
-            </div>
-          </div>
-        )}
-
-        {/* Button Row (only if selectionMode is not 'dropdown') */}
-        {selectionMode !== 'dropdown' && (
+        {/* Button Row */}
         <div className="bg-[#151518] border border-zinc-800 rounded-xl p-3 space-y-3 shadow-lg">
           <div className="flex items-center justify-between text-[11px] text-zinc-400 border-b border-zinc-800 pb-2">
             <div className="flex items-center gap-1.5 font-bold text-zinc-300">
@@ -291,7 +268,7 @@ export default function DiscordEmbedPreview({
                       : 'bg-[#1c1c20] text-zinc-300 border border-zinc-700 hover:border-zinc-500 hover:text-white'
                   }`}
                 >
-                  <GripVertical className="w-3 h-3 text-zinc-600 group-hover:text-zinc-400" />
+                  <GripVertical className="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-400" />
                   <span className="flex items-center">{renderBtnEmoji(btn.emoji)}</span>
                   <span>{btn.label || 'Buy'}</span>
                 </div>
@@ -317,7 +294,6 @@ export default function DiscordEmbedPreview({
             </button>
           </div>
         </div>
-        )}
 
         {/* Global Row Actions */}
         <div className="flex items-center gap-3 pt-1">
@@ -327,12 +303,6 @@ export default function DiscordEmbedPreview({
             className="flex-1 bg-[#151518] hover:bg-zinc-800/80 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5 text-yellow-400" /> Add Button Row
-          </button>
-          <button
-            type="button"
-            className="flex-1 bg-[#151518] hover:bg-zinc-800/80 border border-zinc-800 text-zinc-300 hover:text-white text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-yellow-400" /> Add Dropdown Menu
           </button>
         </div>
       </div>

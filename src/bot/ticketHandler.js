@@ -34,9 +34,9 @@ export async function handleTicketButtonInteraction(interaction, broadcastWs) {
     const panels = dbPanels.all();
     const panelKey = Object.keys(panels).find(k => 
       panels[k].buttons?.some(b => b.customId === customId)
-    ) || Object.keys(panels)[0];
+    ) || (customId.includes('support') ? 'default-support-panel' : 'default-purchase-panel');
 
-    const panel = panels[panelKey];
+    const panel = panels[panelKey] || (customId.includes('support') ? panels['default-support-panel'] : panels['default-purchase-panel']) || Object.values(panels)[0];
     if (!panel) {
       return interaction.reply({ content: '❌ Ticket panel configuration not found.', flags: MessageFlags.Ephemeral });
     }

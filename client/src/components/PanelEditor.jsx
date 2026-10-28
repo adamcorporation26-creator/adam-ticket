@@ -21,26 +21,79 @@ import {
   LayoutGrid
 } from 'lucide-react';
 
+const defaultPurchasePanel = {
+  id: 'default-purchase-panel',
+  name: 'Purchase Ticket Panel',
+  channelType: 'text',
+  category: '╰--- 𝐓𝐢𝐜𝐤𝐞𝐭𝐬',
+  supportRoles: ['𝐒𝐭𝐚𝐟𝐟', '𝐌𝐚𝐧𝐚𝐠𝐞𝐫', '𝐅𝐨𝐮𝐧𝐝𝐞𝐫'],
+  blockedRoles: [],
+  customTicketName: 'buy-{USER_NAME}',
+  openLogChannel: '#ticket-logs',
+  closeLogChannel: '#ticket-logs',
+  embed: {
+    authorName: 'ADAM Corporation Tickets',
+    authorUrl: '',
+    authorIconUrl: '',
+    title: '',
+    titleUrl: '',
+    description: '<:140268information:1559615872409272419> Rules\n• Tickets Are For **Purchases** Only.\n• Any Other Requests = **Instant Ban**.\n• Stay **Respectful** Or Risk **Removal**.\n',
+    color: '#ff0037',
+    thumbnailUrl: '',
+    imageUrl: 'https://cdn.discordapp.com/attachments/1469382427985186829/1560177770300973136/image.png',
+    footerIconUrl: '',
+    footerText: ''
+  },
+  welcomeMessage: {
+    content: 'Welcome {USER}. You can continue your purchase in 🛒 {GUILD_NAME} here.\n\nWait for a moment our Staffs will help you!',
+    embedTitle: 'Ticket Created!',
+    embedDescription: 'Please describe your request in detail. Staff will respond shortly.',
+    color: '#e11d48'
+  },
+  buttons: [
+    {
+      id: 'buy_btn',
+      label: 'Buy',
+      style: 'Danger',
+      emoji: '🛒',
+      customId: 'ticket_create_buy'
+    }
+  ],
+  selectionMode: 'buttons',
+  deployedMessageId: '',
+  deployedChannelId: '',
+  extraMessageContent: '',
+  permissions: {
+    addReactions: true,
+    attachFiles: true,
+    embedLinks: false,
+    sendVoiceMessages: true,
+    useExternalEmojis: true,
+    useExternalStickers: true,
+    useAppCommands: false
+  }
+};
+
 const defaultSupportPanel = {
   id: 'default-support-panel',
   name: 'Support Ticket Panel',
   channelType: 'text',
-  category: '🎟️ • 𝐓𝐢𝐜𝐤𝐞𝐭𝐬',
+  category: '╰--- 𝐒𝐮𝐩𝐩𝐨𝐫𝐭',
   supportRoles: ['𝐒𝐭𝐚𝐟𝐟', '𝐌𝐚𝐧𝐚𝐠𝐞𝐫', '𝐅𝐨𝐮𝐧𝐝𝐞𝐫'],
   blockedRoles: [],
   customTicketName: 'support-{USER_NAME}',
   openLogChannel: '#ticket-logs',
   closeLogChannel: '#ticket-logs',
   embed: {
-    authorName: '𝐀𝐃𝐀𝐌 𝐂𝐎𝐑𝐏𝐎𝐑𝐀𝐓𝐈𝐎𝐍 𝐓𝐢𝐜𝐤𝐞𝐭𝐬',
+    authorName: 'ADAM Corporation Support',
     authorUrl: '',
     authorIconUrl: '',
     title: '',
     titleUrl: '',
-    description: 'Rules\n• Tickets Are For **Support** Only.\n• Any Other Requests = **Instant Ban**.\n• Stay **Respectful** Or Risk **Removal**.\n',
+    description: '<:140268information:1559615872409272419> Rules\n• Tickets Are For **Support** Only.\n• Any Other Requests = **Instant Ban**.\n• Stay **Respectful** Or Risk **Removal**.\n',
     color: '#ff0037',
     thumbnailUrl: '',
-    imageUrl: 'https://cdn.discordapp.com/attachments/1469382427985186829/1559558254089207901/Adam_corp_Ticket_Pic.jpg?ex=6acf834e&is=6ace31ce&hm=2c623d0447aa607d10db1bc75b96bfed4e6100b78fb33bc08a40140ee8ea729c&',
+    imageUrl: 'https://cdn.discordapp.com/attachments/1469382427985186829/1560177770300973136/image.png',
     footerIconUrl: '',
     footerText: ''
   },
@@ -53,12 +106,13 @@ const defaultSupportPanel = {
   buttons: [
     {
       id: 'support_btn',
-      label: 'Support',
-      style: 'Primary',
+      label: 'Get Support',
+      style: 'Danger',
       emoji: '🎫',
       customId: 'ticket_create_support'
     }
   ],
+  selectionMode: 'buttons',
   deployedMessageId: '',
   deployedChannelId: '',
   extraMessageContent: '',
@@ -83,9 +137,22 @@ export default function PanelEditor({
   emojis = [], 
   categories = [] 
 }) {
-  // Two panels: Panel 1 (Purchase) and Panel 2 (Support)
-  const [panel1, setPanel1] = useState(panels['default-purchase-panel'] || panelData || {});
-  const [panel2, setPanel2] = useState(panels['default-support-panel'] || defaultSupportPanel);
+  // Two panels: Panel 1 (Purchase / Buy Tickets) and Panel 2 (Support / Support Tickets)
+  const [panel1, setPanel1] = useState(() => {
+    const raw = panels['default-purchase-panel'] || panelData || defaultPurchasePanel;
+    const btns = raw.buttons && raw.buttons.length > 0 
+      ? raw.buttons.map(b => b.id === 'buy_btn' || b.customId === 'ticket_create_buy' ? { ...b, label: 'Buy' } : b)
+      : [{ id: 'buy_btn', label: 'Buy', style: 'Danger', emoji: '🛒', customId: 'ticket_create_buy' }];
+    return { ...raw, buttons: btns, selectionMode: 'buttons' };
+  });
+
+  const [panel2, setPanel2] = useState(() => {
+    const raw = panels['default-support-panel'] || defaultSupportPanel;
+    const btns = raw.buttons && raw.buttons.length > 0 
+      ? raw.buttons.map(b => b.id === 'support_btn' || b.customId === 'ticket_create_support' ? { ...b, label: 'Get Support' } : b)
+      : [{ id: 'support_btn', label: 'Get Support', style: 'Danger', emoji: '🎫', customId: 'ticket_create_support' }];
+    return { ...raw, buttons: btns, selectionMode: 'buttons' };
+  });
 
   // Active view: 'panel1' (Embed 1), 'panel2' (Embed 2), or 'dual' (Side-by-side preview)
   const [activeTab, setActiveTab] = useState('panel1');
@@ -114,18 +181,28 @@ export default function PanelEditor({
 
   useEffect(() => {
     if (panels['default-purchase-panel']) {
-      setPanel1(panels['default-purchase-panel']);
-      if (panels['default-purchase-panel'].deployedChannelId) {
-        setTargetChannelId1(panels['default-purchase-panel'].deployedChannelId);
+      const raw1 = panels['default-purchase-panel'];
+      const btns1 = raw1.buttons && raw1.buttons.length > 0
+        ? raw1.buttons.map(b => b.id === 'buy_btn' || b.customId === 'ticket_create_buy' ? { ...b, label: 'Buy' } : b)
+        : [{ id: 'buy_btn', label: 'Buy', style: 'Danger', emoji: '🛒', customId: 'ticket_create_buy' }];
+      const p1 = { ...raw1, buttons: btns1, selectionMode: 'buttons' };
+      setPanel1(p1);
+      if (p1.deployedChannelId) {
+        setTargetChannelId1(p1.deployedChannelId);
       }
     } else if (panelData) {
-      setPanel1(panelData);
+      setPanel1(prev => ({ ...prev, ...panelData, selectionMode: 'buttons' }));
     }
 
     if (panels['default-support-panel']) {
-      setPanel2(panels['default-support-panel']);
-      if (panels['default-support-panel'].deployedChannelId) {
-        setTargetChannelId2(panels['default-support-panel'].deployedChannelId);
+      const raw2 = panels['default-support-panel'];
+      const btns2 = raw2.buttons && raw2.buttons.length > 0
+        ? raw2.buttons.map(b => b.id === 'support_btn' || b.customId === 'ticket_create_support' ? { ...b, label: 'Get Support' } : b)
+        : [{ id: 'support_btn', label: 'Get Support', style: 'Danger', emoji: '🎫', customId: 'ticket_create_support' }];
+      const p2 = { ...raw2, buttons: btns2, selectionMode: 'buttons' };
+      setPanel2(p2);
+      if (p2.deployedChannelId) {
+        setTargetChannelId2(p2.deployedChannelId);
       }
     }
   }, [panels, panelData]);
@@ -472,8 +549,6 @@ export default function PanelEditor({
                 embedTitle="Embed 1 • Purchase"
                 embedData={panel1.embed || {}} 
                 buttons={panel1.buttons || []} 
-                selectionMode={panel1.selectionMode || 'buttons'}
-                selectPlaceholder={panel1.selectPlaceholder}
                 selectedButtonId={selectedButtonId}
                 onSelectButton={(id) => { setSelectedButtonId(id); setActiveTab('panel1'); }}
                 onAddButton={handleAddButton}
@@ -539,8 +614,6 @@ export default function PanelEditor({
                 embedTitle="Embed 2 • Support"
                 embedData={panel2.embed || {}} 
                 buttons={panel2.buttons || []} 
-                selectionMode={panel2.selectionMode || 'buttons'}
-                selectPlaceholder={panel2.selectPlaceholder}
                 selectedButtonId={selectedButtonId}
                 onSelectButton={(id) => { setSelectedButtonId(id); setActiveTab('panel2'); }}
                 onAddButton={handleAddButton}
@@ -602,8 +675,6 @@ export default function PanelEditor({
               embedTitle={activeTab === 'panel2' ? 'Embed 2 • Support' : 'Embed 1 • Purchase'}
               embedData={activePanel.embed || {}} 
               buttons={activePanel.buttons || []} 
-              selectionMode={activePanel.selectionMode || 'buttons'}
-              selectPlaceholder={activePanel.selectPlaceholder}
               selectedButtonId={selectedButtonId}
               onSelectButton={(id) => setSelectedButtonId(id)}
               onAddButton={handleAddButton}
