@@ -1,5 +1,12 @@
 import fs from 'fs';
 import dotenv from 'dotenv';
+import WebSocket from 'ws';
+
+// Polyfill native WebSocket for Node environments (< 22) required by @supabase/realtime-js
+if (!globalThis.WebSocket) {
+  globalThis.WebSocket = WebSocket;
+}
+
 import { createServer } from './server/index.js';
 import { initBot } from './bot/index.js';
 import { initDatabase } from './db/database.js';
@@ -51,4 +58,3 @@ async function main() {
 main().catch(err => {
   console.error('Fatal startup error:', err);
 });
-
