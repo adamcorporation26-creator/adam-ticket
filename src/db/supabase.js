@@ -12,10 +12,24 @@ function formatSupabaseUrl(url) {
   if (!url) return null;
   let cleaned = url.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
   if (!cleaned || cleaned.includes('your-project') || cleaned.includes('<')) return null;
+
+  // If user pasted dashboard URL: https://supabase.com/dashboard/project/xyz
+  const dashMatch = cleaned.match(/dashboard\/project\/([a-z0-9_-]+)/i);
+  if (dashMatch) {
+    return `https://${dashMatch[1]}.supabase.co`;
+  }
+
   if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
     cleaned = `https://${cleaned}`;
   }
-  return cleaned;
+
+  try {
+    const parsed = new URL(cleaned);
+    // Project URL must only be protocol + host (e.g. https://xyz.supabase.co) without /rest/v1 or subpaths
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return cleaned.replace(/\/rest.*$/i, '').replace(/\/+$/, '');
+  }
 }
 
 function cleanKey(key) {
@@ -30,6 +44,10 @@ const supabaseKey = cleanKey(process.env.SUPABASE_SERVICE_ROLE_KEY || process.en
 
 if (process.env.SUPABASE_URL && !supabaseUrl) {
   console.warn('[Supabase] ⚠️ SUPABASE_URL appears to be invalid or placeholder:', process.env.SUPABASE_URL);
+}
+
+if (supabaseUrl) {
+  console.log('[Supabase] 🔗 Connected to Project URL:', supabaseUrl);
 }
 
 export const supabase = (supabaseUrl && supabaseKey) 
