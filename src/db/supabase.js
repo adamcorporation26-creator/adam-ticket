@@ -8,8 +8,29 @@ if (!globalThis.WebSocket) {
 
 dotenv.config();
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+function formatSupabaseUrl(url) {
+  if (!url) return null;
+  let cleaned = url.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
+  if (!cleaned || cleaned.includes('your-project') || cleaned.includes('<')) return null;
+  if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+    cleaned = `https://${cleaned}`;
+  }
+  return cleaned;
+}
+
+function cleanKey(key) {
+  if (!key) return null;
+  const cleaned = key.trim().replace(/^["']|["']$/g, '');
+  if (!cleaned || cleaned.includes('your_') || cleaned.includes('<')) return null;
+  return cleaned;
+}
+
+const supabaseUrl = formatSupabaseUrl(process.env.SUPABASE_URL);
+const supabaseKey = cleanKey(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY);
+
+if (process.env.SUPABASE_URL && !supabaseUrl) {
+  console.warn('[Supabase] ⚠️ SUPABASE_URL appears to be invalid or placeholder:', process.env.SUPABASE_URL);
+}
 
 export const supabase = (supabaseUrl && supabaseKey) 
   ? createClient(supabaseUrl, supabaseKey, {
@@ -22,6 +43,11 @@ export const supabase = (supabaseUrl && supabaseKey)
 
 export function isSupabaseConfigured() {
   return Boolean(supabase && supabaseUrl && supabaseKey);
+}
+
+function logSupabaseError(action, err) {
+  const cause = err?.cause ? (err.cause.message || err.cause.code || JSON.stringify(err.cause)) : '';
+  console.error(`[Supabase] ${action}:`, err.message, cause ? `(Cause: ${cause})` : '');
 }
 
 // ============================================================================
@@ -38,7 +64,7 @@ export async function fetchPanelsFromSupabase() {
     }
     return result;
   } catch (err) {
-    console.error('[Supabase] Error fetching panels:', err.message);
+    logSupabaseError('Error fetching panels', err);
     return null;
   }
 }
@@ -55,7 +81,7 @@ export async function upsertPanelToSupabase(id, panelData) {
     const { error } = await supabase.from('panels').upsert(payload, { onConflict: 'id' });
     if (error) throw error;
   } catch (err) {
-    console.error(`[Supabase] Error saving panel ${id}:`, err.message);
+    logSupabaseError(`Error saving panel ${id}`, err);
   }
 }
 
@@ -78,7 +104,7 @@ export async function fetchTicketsFromSupabase() {
       authorId: row.author_id || row.data?.authorId
     }));
   } catch (err) {
-    console.error('[Supabase] Error fetching tickets:', err.message);
+    logSupabaseError('Error fetching tickets', err);
     return null;
   }
 }
@@ -101,7 +127,7 @@ export async function upsertTicketToSupabase(ticket) {
     const { error } = await supabase.from('tickets').upsert(payload, { onConflict: 'id' });
     if (error) throw error;
   } catch (err) {
-    console.error(`[Supabase] Error saving ticket ${ticket.id}:`, err.message);
+    logSupabaseError(`Error saving ticket ${ticket.id}`, err);
   }
 }
 
@@ -129,7 +155,7 @@ export async function upsertAllTicketsToSupabase(ticketsList) {
     const { error } = await supabase.from('tickets').upsert(payloads, { onConflict: 'id' });
     if (error) throw error;
   } catch (err) {
-    console.error('[Supabase] Error saving all tickets:', err.message);
+    logSupabaseError('Error saving all tickets', err);
   }
 }
 
@@ -139,7 +165,7 @@ export async function deleteTicketFromSupabase(ticketId) {
     const { error } = await supabase.from('tickets').delete().eq('id', ticketId);
     if (error) throw error;
   } catch (err) {
-    console.error(`[Supabase] Error deleting ticket ${ticketId}:`, err.message);
+    logSupabaseError(`Error deleting ticket ${ticketId}`, err);
   }
 }
 
@@ -157,7 +183,7 @@ export async function fetchSettingsFromSupabase() {
     }
     return result;
   } catch (err) {
-    console.error('[Supabase] Error fetching settings:', err.message);
+    logSupabaseError('Error fetching settings', err);
     return null;
   }
 }
@@ -173,7 +199,7 @@ export async function upsertSettingToSupabase(key, value) {
     const { error } = await supabase.from('settings').upsert(payload, { onConflict: 'key' });
     if (error) throw error;
   } catch (err) {
-    console.error(`[Supabase] Error saving setting ${key}:`, err.message);
+    logSupabaseError(`Error saving setting ${key}`, err);
   }
 }
 
@@ -193,7 +219,7 @@ export async function fetchAuditLogsFromSupabase() {
       timestamp: row.created_at
     });
   } catch (err) {
-    console.error('[Supabase] Error fetching audit logs:', err.message);
+    logSupabaseError('Error fetching audit logs', err);
     return null;
   }
 }
@@ -212,6 +238,6 @@ export async function upsertAuditLogToSupabase(log) {
     const { error } = await supabase.from('audit_logs').upsert(payload, { onConflict: 'id' });
     if (error) throw error;
   } catch (err) {
-    console.error('[Supabase] Error saving audit log:', err.message);
+    logSupabaseError('Error saving audit log', err);
   }
 }
